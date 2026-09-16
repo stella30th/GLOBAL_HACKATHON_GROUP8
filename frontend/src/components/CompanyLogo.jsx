@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState } from 'react';
 
 /**
  * Company avatar with a generated fallback.
@@ -12,15 +12,10 @@ import React, { useState, useEffect } from 'react';
  * needs no network, never breaks, and gives each employer a stable, distinguishable mark.
  */
 export default function CompanyLogo({ company, src, size = 44, radius = 10 }) {
-  const [failed, setFailed] = useState(false);
-
-  // A new job can reuse this component instance, so clear the previous failure.
-  useEffect(() => {
-    setFailed(false);
-  }, [src]);
+  const [failedSrc, setFailedSrc] = useState(null);
 
   const name = (company || '').trim();
-  const showImage = src && !failed;
+  const showImage = src && failedSrc !== src;
 
   if (showImage) {
     return (
@@ -30,7 +25,7 @@ export default function CompanyLogo({ company, src, size = 44, radius = 10 }) {
         className="company-avatar"
         style={{ width: size, height: size, borderRadius: radius }}
         loading="lazy"
-        onError={() => setFailed(true)}
+        onError={() => setFailedSrc(src)}
       />
     );
   }

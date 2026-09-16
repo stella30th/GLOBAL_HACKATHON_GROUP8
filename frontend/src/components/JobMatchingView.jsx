@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
-import { 
-  Search, DollarSign, Briefcase,
+import { useState, useEffect, useRef, useCallback } from 'react';
+import {
+  DollarSign, Briefcase,
   ExternalLink, Sparkles,
   X, Compass, ShieldCheck, ArrowRight, Plane, RefreshCw, Loader2, Dumbbell
 } from 'lucide-react';
@@ -8,7 +8,7 @@ import { fetchMatches, fetchJobAiDeepDive, saveProfile } from '../api';
 import CompanyLogo from './CompanyLogo';
 import JobFilterPanel from './JobFilterPanel';
 
-export default function JobMatchingView({ showToast, onPracticeQuestion }) {
+export default function JobMatchingView({ profile, setProfile, showToast, onPracticeQuestion }) {
   const [matches, setMatches] = useState([]);
   const [loading, setLoading] = useState(true);
   const [keyword, setKeyword] = useState('');
@@ -42,7 +42,8 @@ export default function JobMatchingView({ showToast, onPracticeQuestion }) {
   };
 
   useEffect(() => {
-    loadMatches();
+    const timer = window.setTimeout(loadMatches, 0);
+    return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeFilter, profile?.targetWorkType, profile?.willingToRelocate, profile?.targetLocations]);
 

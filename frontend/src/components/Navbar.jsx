@@ -1,6 +1,6 @@
-import { Sparkles, User, Briefcase, Award, MessageSquare } from 'lucide-react';
+import { Sparkles, User, Briefcase, Award, MessageSquare, Sun, Moon } from 'lucide-react';
 
-export default function Navbar({ activeTab, setActiveTab, isConnected }) {
+export default function Navbar({ activeTab, setActiveTab, theme, onToggleTheme }) {
   // Ordered as the product works: describe yourself, see the gaps, practise, then look outward.
   const tabs = [
     { id: 'profile', label: 'My profile', icon: User },

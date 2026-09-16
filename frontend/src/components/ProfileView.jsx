@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { 
-  UploadCloud, FileText, User, Globe,
-  MapPin, Plus, X, Save, ArrowRight, Loader2 
+import {
+  UploadCloud, FileText, User,
+  Plus, X, Save, ArrowRight, Loader2
 } from 'lucide-react';
 import { saveProfile, uploadCvFile, resetSampleProfile, DEFAULT_PROFILE, YEAR_OF_STUDY_OPTIONS } from '../api';
 

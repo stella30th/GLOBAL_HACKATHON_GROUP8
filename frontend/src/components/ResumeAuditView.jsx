@@ -60,7 +60,8 @@ export default function ResumeAuditView({ profile, onPracticeMilestone, onToggle
    * object too, and refetching on that would have thrown away the roadmap mid-tick.
    */
   useEffect(() => {
-    loadAudit();
+    const timer = window.setTimeout(loadAudit, 0);
+    return () => window.clearTimeout(timer);
   }, [loadAudit, profile?.id, profile?.updatedAt]);
 
   const roadmap = audit?.careerRoadmap;

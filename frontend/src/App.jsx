@@ -37,6 +37,19 @@ const STATUS = {
   OFFLINE: 'offline',
 };
 
+const THEME_KEY = 'AICAREER_THEME';
+
+function initialTheme() {
+  if (typeof window === 'undefined') return 'dark';
+  try {
+    const saved = localStorage.getItem(THEME_KEY);
+    if (saved === 'light' || saved === 'dark') return saved;
+  } catch {
+    // Fall through to the system preference when storage is unavailable.
+  }
+  return window.matchMedia?.('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+}
+
 const EMPTY_CHAT = { sessionId: 'initial', messages: [], loading: false, context: null, pendingRetry: null };
 
 export default function App() {
@@ -57,6 +70,16 @@ export default function App() {
    */
   const [chat, setChat] = useState(EMPTY_CHAT);
   const [practiceRequest, setPracticeRequest] = useState(null);
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    document.documentElement.style.colorScheme = theme;
+    try {
+      localStorage.setItem(THEME_KEY, theme);
+    } catch {
+      // The theme still works for this session when storage is unavailable.
+    }
+  }, [theme]);
 
   const revision = profileRevisionOf(profile);
   const lastRevisionRef = useRef(revision);
@@ -91,7 +114,8 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    connect();
+    const timer = window.setTimeout(connect, 0);
+    return () => window.clearTimeout(timer);
   }, [connect]);
 
   // Hold the instance open while the user is working, so they pay the cold start at most once.
@@ -259,6 +283,7 @@ export default function App() {
         {activeTab === 'matching' && (
           <JobMatchingView
             profile={profile}
+            setProfile={setProfile}
             showToast={showToast}
             isConnected={isConnected}
             onPracticeQuestion={startJobPractice}
