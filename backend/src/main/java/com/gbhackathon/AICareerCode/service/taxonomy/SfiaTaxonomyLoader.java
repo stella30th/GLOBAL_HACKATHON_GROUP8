@@ -388,7 +388,12 @@ public class SfiaTaxonomyLoader {
                 return -1;
             }
             Path destination = folder.resolve(FETCHED_FILE_NAME);
-            Files.move(temp, destination, StandardCopyOption.REPLACE_EXISTING);
+            try {
+                Files.move(temp, destination, StandardCopyOption.REPLACE_EXISTING);
+            } catch (IOException e) {
+                unavailableReason = "Could not save the downloaded workbook (" + e.getClass().getSimpleName() + ").";
+                return -1;
+            }
             temp = null;
             commit(skills, FETCHED_FILE_NAME, "REMOTE");
             log.info("Fetched and applied the SFIA workbook from the configured source ({} skills)",
