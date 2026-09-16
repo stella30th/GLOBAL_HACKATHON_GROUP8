@@ -30,7 +30,8 @@ export default function ResumeAuditView({ profile }) {
     return (
       <div style={{ textAlign: 'center', padding: '4rem', color: 'var(--text-secondary)' }}>
         <Sparkles className="animate-spin" size={32} style={{ margin: '0 auto 1rem', display: 'block', color: 'var(--accent-primary)' }} />
-        AI is evaluating resume health for <strong>{profile?.fullName || 'candidate'}</strong> and analyzing ATS keyword density...
+        AI đang đánh giá hồ sơ của <strong>{profile?.fullName || 'bạn'}</strong>
+        {profile?.industry ? <> theo tiêu chuẩn ngành <strong>{profile.industry}</strong></> : null}…
       </div>
     );
   }
@@ -54,7 +55,9 @@ export default function ResumeAuditView({ profile }) {
         <div className="page-header-text">
           <h1>Resume Audit & Career Progression Roadmap</h1>
           <p>
-            Candidate: <strong style={{ color: '#fff' }}>{profile?.fullName || 'Current Profile'}</strong> ({profile?.currentTitle || 'Software Engineer'}) • Evaluated via global ATS standards & Gemini 3.5 Flash.
+            Ứng viên: <strong style={{ color: '#fff' }}>{profile?.fullName || 'Hồ sơ hiện tại'}</strong>
+            {' '}({profile?.currentTitle || 'chưa xác định'}{profile?.industry ? ` — ${profile.industry}` : ''})
+            {' '}• Đánh giá theo chuẩn ATS quốc tế cho đúng ngành của bạn.
           </p>
         </div>
         <button className="btn btn-primary btn-sm" onClick={loadAudit} disabled={loading}>
@@ -70,9 +73,15 @@ export default function ResumeAuditView({ profile }) {
               <Award size={16} />
               <span>Resume Health Index (ATS Benchmark)</span>
             </div>
-            <span style={{ fontSize: '0.75rem', padding: '0.2rem 0.6rem', borderRadius: '9999px', background: 'rgba(168, 85, 247, 0.2)', border: '1px solid rgba(168, 85, 247, 0.4)', color: '#c084fc', display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
-              <Sparkles size={12} /> Powered by Gemini 3.5 Flash
-            </span>
+            {audit.generatedBy === 'offline' ? (
+              <span className="ai-badge ai-badge-offline" title={audit.offlineReason || ''}>
+                Phân tích offline (AI tạm không khả dụng)
+              </span>
+            ) : (
+              <span className="ai-badge ai-badge-live">
+                <Sparkles size={12} /> {audit.model || 'Gemini'}
+              </span>
+            )}
           </div>
           <h2 style={{ fontSize: '1.8rem', color: '#ffffff', marginBottom: '0.6rem' }}>
             {audit.verdict}

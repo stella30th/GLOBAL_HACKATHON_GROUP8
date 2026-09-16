@@ -8,6 +8,7 @@ public class MatchResultDto {
     private int skillsScore;       // 0 - 100%
     private int experienceScore;   // 0 - 100%
     private int relocationScore;   // 0 - 100%
+    private int domainScore;       // 0 - 100%: how close the role is to the candidate's profession
     private List<String> matchedSkills;
     private List<String> missingSkills;
     private String visaSuitability; // "Sẵn sàng", "Cần bảo lãnh Visa", "Cơ hội cao", "Thách thức ngoại ngữ"
@@ -48,6 +49,14 @@ public class MatchResultDto {
 
     public int getRelocationScore() {
         return relocationScore;
+    }
+
+    public int getDomainScore() {
+        return domainScore;
+    }
+
+    public void setDomainScore(int domainScore) {
+        this.domainScore = domainScore;
     }
 
     public void setRelocationScore(int relocationScore) {

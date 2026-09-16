@@ -1,21 +1,43 @@
 package com.gbhackathon.AICareerCode.dto;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+
 import java.util.List;
 
+/**
+ * Tolerates the naming variations a language model produces. Without the aliases below a Gemini
+ * response that used "originalBullet" instead of "original" failed to deserialize entirely, and the
+ * whole audit silently fell back to canned text.
+ */
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class ResumeAuditDto {
     private int healthScore; // 0 - 100
     private String verdict;   // "Cần cải thiện", "Khá tốt", "Xuất sắc chuẩn quốc tế"
     private String summary;
     private List<String> strengths;
     private List<String> weaknesses;
+    @JsonAlias({"keywordsPresent", "presentKeywords"})
     private List<String> atsKeywordsPresent;
+    @JsonAlias({"keywordsMissing", "missingKeywords"})
     private List<String> atsKeywordsMissing;
     private List<BulletImprovement> bulletImprovements;
+    @JsonAlias({"roadmap", "progressionRoadmap"})
     private CareerRoadmapDto careerRoadmap;
 
+    // Provenance, set by the server rather than the model: "gemini" or "offline". The UI used to
+    // claim every audit was "Powered by Gemini 3.5 Flash" even when it was rule-based placeholder text.
+    private String generatedBy;
+    private String model;
+    private String offlineReason;
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public static class BulletImprovement {
+        @JsonAlias({"originalBullet", "before", "weakBullet"})
         private String original;
+        @JsonAlias({"improvedBullet", "after", "rewrittenBullet"})
         private String improved;
+        @JsonAlias({"explanation", "why", "reason"})
         private String rationale;
 
         public BulletImprovement() {}
@@ -113,6 +135,30 @@ public class ResumeAuditDto {
 
     public void setBulletImprovements(List<BulletImprovement> bulletImprovements) {
         this.bulletImprovements = bulletImprovements;
+    }
+
+    public String getGeneratedBy() {
+        return generatedBy;
+    }
+
+    public void setGeneratedBy(String generatedBy) {
+        this.generatedBy = generatedBy;
+    }
+
+    public String getModel() {
+        return model;
+    }
+
+    public void setModel(String model) {
+        this.model = model;
+    }
+
+    public String getOfflineReason() {
+        return offlineReason;
+    }
+
+    public void setOfflineReason(String offlineReason) {
+        this.offlineReason = offlineReason;
     }
 
     public CareerRoadmapDto getCareerRoadmap() {

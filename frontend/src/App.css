@@ -964,3 +964,97 @@ textarea.form-control {
     padding: 1.15rem;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Backend connection banner
+
+   Waking and failing are visually distinct: on Render's free tier the instance
+   sleeps after 15 minutes, so a slow first load is expected rather than broken.
+   --------------------------------------------------------------------------- */
+
+.conn-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  padding: 0.6rem 1.25rem;
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.conn-banner-waking {
+  background: rgba(59, 130, 246, 0.08);
+  border-bottom: 1px solid rgba(59, 130, 246, 0.25);
+  color: #93c5fd;
+}
+
+.conn-banner-waking span {
+  display: inline;
+}
+
+.conn-banner-offline {
+  background: rgba(239, 68, 68, 0.08);
+  border-bottom: 1px solid rgba(239, 68, 68, 0.25);
+  color: #fca5a5;
+}
+
+.conn-banner-msg {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.conn-banner-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.conn-input {
+  padding: 0.35rem 0.65rem;
+  border-radius: 6px;
+  border: 1px solid #334155;
+  background: #0f172a;
+  color: #fff;
+  font-size: 0.78rem;
+  min-width: 260px;
+}
+
+.conn-retry {
+  background: #1e293b;
+  color: #cbd5e1;
+  border: 1px solid #334155;
+}
+
+/* Provenance chip: says whether an answer came from Gemini or the offline fallback,
+   instead of labelling every response "Powered by Gemini" unconditionally. */
+.ai-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.72rem;
+  padding: 0.18rem 0.55rem;
+  border-radius: 9999px;
+  white-space: nowrap;
+}
+
+.ai-badge-live {
+  background: rgba(168, 85, 247, 0.18);
+  border: 1px solid rgba(168, 85, 247, 0.4);
+  color: #c084fc;
+}
+
+.ai-badge-offline {
+  background: rgba(234, 179, 8, 0.14);
+  border: 1px solid rgba(234, 179, 8, 0.35);
+  color: #fcd34d;
+}
+
+@media (max-width: 640px) {
+  .conn-input {
+    min-width: 0;
+    flex: 1 1 100%;
+  }
+}

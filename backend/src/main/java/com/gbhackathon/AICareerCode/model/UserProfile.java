@@ -19,6 +19,7 @@ public class UserProfile {
     private String email;
     private String phone;
     private String currentTitle;
+    private String industry; // e.g. "Semiconductor / IC Design", "Finance & Accounting"
     private Double yearsOfExperience;
 
     @Column(columnDefinition = "TEXT")
@@ -207,6 +208,14 @@ public class UserProfile {
 
     public void setTargetWorkType(String targetWorkType) {
         this.targetWorkType = targetWorkType;
+    }
+
+    public String getIndustry() {
+        return industry;
+    }
+
+    public void setIndustry(String industry) {
+        this.industry = industry;
     }
 
     public String getRawCvText() {

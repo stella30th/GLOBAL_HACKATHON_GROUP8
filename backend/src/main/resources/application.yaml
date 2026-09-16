@@ -1,5 +1,12 @@
 server:
   port: ${PORT:8080}
+  compression:
+    # Job listings and AI analyses are sizeable JSON payloads; compressing them is the cheapest
+    # win available on Render's free tier, where bandwidth and latency dominate response time.
+    enabled: true
+    mime-types: application/json,text/plain,text/css,text/javascript,application/javascript
+    min-response-size: 1024
+  shutdown: graceful
 
 spring:
   application:
@@ -14,9 +21,15 @@ spring:
     hibernate:
       ddl-auto: update
     show-sql: false
+    # Closing the session at the end of the service call rather than at the end of the request
+    # keeps a connection from being held for the whole render of a response.
+    open-in-view: false
     properties:
       hibernate:
         format_sql: true
+        jdbc:
+          batch_size: 25
+        order_inserts: true
   servlet:
     multipart:
       max-file-size: 10MB
@@ -24,5 +37,14 @@ spring:
 
 ai:
   gemini:
-    api-key: ${GEMINI_API_KEY:YOUR_GEMINI_API_KEY}
-    model: ${GEMINI_MODEL:gemini-3.5-flash}
+    api-key: ${GEMINI_API_KEY:}
+    # Primary model. gemini-3.5-flash is capable but its free tier allows only 20 requests per day
+    # per project, which this app exhausts quickly; the lite models have a far larger allowance.
+    model: ${GEMINI_MODEL:gemini-flash-lite-latest}
+    # Tried in order when the primary is rate limited (429) or unavailable to the key (404).
+    fallback-models: ${GEMINI_FALLBACK_MODELS:gemini-3.1-flash-lite,gemini-flash-latest,gemini-3.5-flash,gemini-2.5-flash}
+    timeout-seconds: ${GEMINI_TIMEOUT_SECONDS:45}
+
+logging:
+  level:
+    com.gbhackathon.AICareerCode: INFO

@@ -25,6 +25,7 @@ public class JobDto {
     private String benefits;
     private String applyUrl;
     private String source;
+    private String category;
     private LocalDateTime postedAt;
 
     public Long getId() {
@@ -193,6 +194,14 @@ public class JobDto {
 
     public void setSource(String source) {
         this.source = source;
+    }
+
+    public String getCategory() {
+        return category;
+    }
+
+    public void setCategory(String category) {
+        this.category = category;
     }
 
     public LocalDateTime getPostedAt() {

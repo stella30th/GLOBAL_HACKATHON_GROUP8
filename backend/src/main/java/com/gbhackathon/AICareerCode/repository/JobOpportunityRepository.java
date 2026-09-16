@@ -13,10 +13,16 @@ public interface JobOpportunityRepository extends JpaRepository<JobOpportunity, 
 
     List<JobOpportunity> findByIsOverseas(Boolean isOverseas);
 
+    /**
+     * Dedupe check for the importer. Replaces a per-posting full table scan that ran
+     * {@code searchJobs(title, ...)} and then filtered the result in memory.
+     */
+    boolean existsByTitleIgnoreCaseAndCompanyIgnoreCase(String title, String company);
+
     List<JobOpportunity> findByVisaSponsorshipTrue();
 
     @Query("SELECT j FROM JobOpportunity j WHERE " +
-           "(:keyword IS NULL OR LOWER(j.title) LIKE LOWER(CONCAT('%', :keyword, '%')) OR LOWER(j.company) LIKE LOWER(CONCAT('%', :keyword, '%')) OR LOWER(j.requiredSkills) LIKE LOWER(CONCAT('%', :keyword, '%'))) AND " +
+           "(:keyword IS NULL OR LOWER(j.title) LIKE LOWER(CONCAT('%', :keyword, '%')) OR LOWER(j.company) LIKE LOWER(CONCAT('%', :keyword, '%')) OR LOWER(COALESCE(j.requiredSkills, '')) LIKE LOWER(CONCAT('%', :keyword, '%')) OR LOWER(COALESCE(j.category, '')) LIKE LOWER(CONCAT('%', :keyword, '%'))) AND " +
            "(:isOverseas IS NULL OR j.isOverseas = :isOverseas) AND " +
            "(:workType IS NULL OR j.workType = :workType) AND " +
            "(:visaSponsorship IS NULL OR j.visaSponsorship = :visaSponsorship)")

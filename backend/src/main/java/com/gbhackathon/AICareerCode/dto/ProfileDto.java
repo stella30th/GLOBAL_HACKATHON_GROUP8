@@ -9,6 +9,7 @@ public class ProfileDto {
     private String email;
     private String phone;
     private String currentTitle;
+    private String industry;
     private Double yearsOfExperience;
     private String bio;
     private List<String> skills;
@@ -131,6 +132,14 @@ public class ProfileDto {
 
     public void setTargetWorkType(String targetWorkType) {
         this.targetWorkType = targetWorkType;
+    }
+
+    public String getIndustry() {
+        return industry;
+    }
+
+    public void setIndustry(String industry) {
+        this.industry = industry;
     }
 
     public String getRawCvText() {

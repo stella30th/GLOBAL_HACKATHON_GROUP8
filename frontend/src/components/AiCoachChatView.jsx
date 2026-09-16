@@ -2,31 +2,43 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Send, Bot, User, Sparkles, Loader2 } from 'lucide-react';
 import { sendChatMessage } from '../api';
 
-export default function AiCoachChatView({ profile }) {
-  const [messages, setMessages] = useState([
-    {
-      role: 'assistant',
-      content: `Hello ${profile?.fullName || 'there'}! I am your **AI Career Coach** powered by Google Gemini. 🚀\n\nI am here to assist you with:\n- 🌏 **Global Career Transition & Job Search** (Singapore, Europe, Japan, US, Worldwide Remote).\n- 🛂 **Visa Sponsorship & Eligibility Insights** for software and tech engineers.\n- 📝 **ATS Resume Tailoring** and rewriting achievements using the STAR methodology.\n- 🎤 **Mock Interviews** (Behavioral scenarios & System Design architecture).\n\nWhat career goal or question would you like to explore today?`,
-    },
+export default function AiCoachChatView({ profile, isConnected }) {
+  const buildWelcome = (p) => {
+    const name = p?.fullName || 'bạn';
+    const title = p?.currentTitle || 'ứng viên';
+    const field = p?.industry ? ` trong lĩnh vực **${p.industry}**` : '';
+    const skills = (p?.skills || []).slice(0, 5).join(', ');
+    return `Chào ${name}! Mình là **AI Career Coach** của bạn.
+
+` +
+      `Mình đang đọc hồ sơ của bạn: **${title}**${field}` +
+      `${skills ? `, với các kỹ năng chính: ${skills}` : ''}.
+
+` +
+      `Hãy hỏi mình bất cứ điều gì về lộ trình nghề nghiệp, CV, phỏng vấn, lương thưởng hoặc cơ hội ở nước ngoài — ` +
+      `mình sẽ trả lời dựa trên đúng ngành và hồ sơ của bạn.`;
+  };
+
+  const [messages, setMessages] = useState(() => [
+    { role: 'assistant', content: buildWelcome(profile), generatedBy: 'welcome' },
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [lastEngine, setLastEngine] = useState(null);
   const messagesEndRef = useRef(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
+  // Refresh the welcome only while it is still the sole message, so re-parsing a CV updates the
+  // greeting but never wipes an ongoing conversation.
   useEffect(() => {
-    if (messages.length <= 1) {
-      setMessages([
-        {
-          role: 'assistant',
-          content: `Hello ${profile?.fullName || 'there'}! I am your **AI Career Coach** powered by Google Gemini 3.5 Flash. 🚀\n\nI am currently analyzing your profile as **${profile?.currentTitle || 'Tech Professional'}** (${profile?.yearsOfExperience || 0} years of experience, core stack: ${(profile?.skills || []).slice(0, 5).join(', ')}).\n\nI am here to assist you with:\n- 🌏 **Global Career Transition & Job Search** (Singapore, Europe, Japan, US, Worldwide Remote).\n- 🛂 **Visa Sponsorship & Eligibility Insights** for software and tech engineers.\n- 📝 **ATS Resume Tailoring** and rewriting achievements using the STAR methodology.\n- 🎤 **Mock Interviews** (Behavioral scenarios & System Design architecture).\n\nWhat career goal or question would you like to explore today?`,
-        },
-      ]);
-    }
-  }, [profile?.fullName, profile?.currentTitle, profile?.updatedAt]);
+    setMessages((prev) =>
+      prev.length <= 1 ? [{ role: 'assistant', content: buildWelcome(profile), generatedBy: 'welcome' }] : prev
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile?.fullName, profile?.currentTitle, profile?.industry, profile?.updatedAt]);
 
   useEffect(() => {
     scrollToBottom();
@@ -43,13 +55,22 @@ export default function AiCoachChatView({ profile }) {
     setLoading(true);
 
     try {
-      const history = messages.slice(-6); // last 6 messages for context
+      // Send only real exchanges as context; the welcome message is UI text, not conversation.
+      const history = messages.filter((m) => m.generatedBy !== 'welcome').slice(-6);
       const res = await sendChatMessage(textToSend.trim(), history);
-      setMessages([...updatedMessages, { role: 'assistant', content: res.reply }]);
+      setLastEngine({ generatedBy: res.generatedBy, model: res.model });
+      setMessages([
+        ...updatedMessages,
+        { role: 'assistant', content: res.reply, generatedBy: res.generatedBy, model: res.model },
+      ]);
     } catch (err) {
       setMessages([
         ...updatedMessages,
-        { role: 'assistant', content: 'Apologies, an error occurred while connecting to the AI Coach. Please try again!' },
+        {
+          role: 'assistant',
+          content: 'Không kết nối được tới AI Coach. Máy chủ có thể đang khởi động lại — vui lòng thử lại sau ít giây.',
+          generatedBy: 'error',
+        },
       ]);
     } finally {
       setLoading(false);
@@ -63,12 +84,22 @@ export default function AiCoachChatView({ profile }) {
     }
   };
 
+  // Suggestions follow the candidate's own field. The previous fixed list asked about EU Blue Cards
+  // for developers and system-design interviews, which is the wrong conversation to offer someone
+  // whose CV is about integrated circuits, nursing or accounting.
+  const role = profile?.currentTitle || 'vị trí của tôi';
+  const field = profile?.industry || 'ngành của tôi';
+  const topSkill = (profile?.skills || [])[0];
+  const targetRole = (profile?.targetRoles || [])[0] || role;
+
   const quickPrompts = [
-    '✈️ Visa sponsorship requirements for Software Engineers in Singapore?',
-    '🇩🇪 How do I qualify for an EU Blue Card in Germany as a Developer?',
-    '🎤 Ask me 3 high-frequency System Design interview questions',
-    '📝 Rewrite this bullet point to highlight metrics using the STAR method',
-    '💰 How to negotiate compensation with international tech employers?',
+    `🧭 Lộ trình 6 tháng tới để tôi ứng tuyển vị trí ${targetRole}?`,
+    `🧩 Hồ sơ của tôi còn thiếu kỹ năng gì so với yêu cầu tuyển dụng ${field}?`,
+    `🎤 Cho tôi 5 câu hỏi phỏng vấn thường gặp cho ${targetRole}`,
+    topSkill
+      ? `📝 Viết lại một gạch đầu dòng CV về ${topSkill} theo công thức STAR có số liệu`
+      : '📝 Cách viết gạch đầu dòng CV theo công thức STAR có số liệu',
+    `✈️ Cơ hội và điều kiện visa để làm ${field} ở nước ngoài?`,
   ];
 
   // Markdown formatter
@@ -110,9 +141,11 @@ export default function AiCoachChatView({ profile }) {
     <div>
       <div className="page-header">
         <div className="page-header-text">
-          <h1>Live AI Career Coach & Advisory</h1>
+          <h1>AI Career Coach</h1>
           <p>
-            Engage with an AI career strategist powered by Google Gemini to practice technical interviews, negotiate offers, and navigate global visa pathways.
+            Trao đổi trực tiếp với AI về lộ trình nghề nghiệp, CV, phỏng vấn và cơ hội quốc tế —
+            dựa trên đúng hồ sơ và lĩnh vực của bạn
+            {profile?.industry ? ` (${profile.industry})` : ''}.
           </p>
         </div>
       </div>
@@ -133,7 +166,15 @@ export default function AiCoachChatView({ profile }) {
                 ) : (
                   <>
                     <Bot size={13} color="#818cf8" />
-                    <span style={{ color: '#818cf8', fontWeight: '700' }}>AI Career Coach (Gemini)</span>
+                    <span style={{ color: '#818cf8', fontWeight: '700' }}>AI Career Coach</span>
+                    {msg.generatedBy === 'gemini' && (
+                      <span className="ai-badge ai-badge-live">
+                        <Sparkles size={10} /> {msg.model || 'Gemini'}
+                      </span>
+                    )}
+                    {msg.generatedBy === 'offline' && (
+                      <span className="ai-badge ai-badge-offline">AI tạm không khả dụng</span>
+                    )}
                   </>
                 )}
               </div>
@@ -146,7 +187,7 @@ export default function AiCoachChatView({ profile }) {
           {loading && (
             <div className="chat-bubble chat-bubble-ai" style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
               <Loader2 className="animate-spin" size={16} color="#818cf8" />
-              <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>AI Career Coach is analyzing and thinking...</span>
+              <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>AI đang phân tích hồ sơ của bạn và soạn câu trả lời…</span>
             </div>
           )}
           <div ref={messagesEndRef} />
@@ -171,7 +212,7 @@ export default function AiCoachChatView({ profile }) {
           <input
             type="text"
             className="chat-input"
-            placeholder="Ask AI Coach about career strategies, system design interviews, global visa pathways..."
+            placeholder="Hỏi AI về lộ trình nghề nghiệp, CV, phỏng vấn, lương thưởng, cơ hội nước ngoài…"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}

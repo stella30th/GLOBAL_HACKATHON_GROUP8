@@ -1,17 +1,27 @@
 package com.gbhackathon.AICareerCode.dto;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+
 import java.util.List;
 
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class CareerRoadmapDto {
     private String targetGoal;
+    @JsonAlias({"month3", "first3Months", "months_3"})
     private List<RoadmapMilestone> months3;
+    @JsonAlias({"month6", "first6Months", "months_6"})
     private List<RoadmapMilestone> months6;
+    @JsonAlias({"month12", "first12Months", "months_12"})
     private List<RoadmapMilestone> months12;
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public static class RoadmapMilestone {
         private String title;
         private String description;
+        @JsonAlias({"type", "milestoneType"})
         private String category; // "SKILL", "CERTIFICATION", "PROJECT", "NETWORKING"
+        @JsonAlias({"hours", "effort", "estimated_hours"})
         private String estimatedHours;
 
         public RoadmapMilestone() {}

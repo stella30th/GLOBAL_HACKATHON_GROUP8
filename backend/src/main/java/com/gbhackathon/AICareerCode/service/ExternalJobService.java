@@ -3,242 +3,579 @@ package com.gbhackathon.AICareerCode.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.gbhackathon.AICareerCode.model.JobOpportunity;
+import com.gbhackathon.AICareerCode.model.UserProfile;
 import com.gbhackathon.AICareerCode.repository.JobOpportunityRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
+import org.springframework.http.client.JdkClientHttpRequestFactory;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestClient;
 
-import java.time.Instant;
+import java.net.http.HttpClient;
+import java.time.Duration;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
 
+/**
+ * Imports live job postings from public job boards.
+ *
+ * <p>The original version queried two boards and hardcoded {@code category=software-dev}, so the
+ * database only ever contained software roles. A candidate in semiconductors, finance or healthcare
+ * was matched against backend engineering jobs. This version pulls from five boards across every
+ * industry they cover, and biases the fetch toward the signed-in candidate's own field.
+ *
+ * <p>It also stops inventing data. The old importer assigned every European posting a salary of
+ * "EUR 60,000 - 85,000" and filled empty skill lists with "Java, React, Docker" - values that
+ * appeared to users as facts about the job. Unknown fields are now left empty.
+ */
 @Service
 public class ExternalJobService {
 
     private static final Logger log = LoggerFactory.getLogger(ExternalJobService.class);
+
     private final JobOpportunityRepository jobRepository;
+    private final ProfileService profileService;
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private RestClient restClient;
 
-    public ExternalJobService(JobOpportunityRepository jobRepository) {
+    public ExternalJobService(JobOpportunityRepository jobRepository, ProfileService profileService) {
         this.jobRepository = jobRepository;
+        this.profileService = profileService;
     }
 
+    private RestClient client() {
+        if (restClient == null) {
+            HttpClient http = HttpClient.newBuilder()
+                    .connectTimeout(Duration.ofSeconds(8))
+                    .followRedirects(HttpClient.Redirect.NORMAL)
+                    .build();
+            JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(http);
+            factory.setReadTimeout(Duration.ofSeconds(20));
+            restClient = RestClient.builder()
+                    .requestFactory(factory)
+                    // Remote OK and The Muse reject requests without a browser-like agent.
+                    .defaultHeader("User-Agent", "AICareerCode/1.0 (+https://github.com/aicareercode)")
+                    .defaultHeader("Accept", "application/json")
+                    .build();
+        }
+        return restClient;
+    }
+
+    /**
+     * Warm the database on startup without delaying readiness. The previous implementation ran the
+     * HTTP fetches inline in the {@code ApplicationReadyEvent} listener, adding those seconds to
+     * every Render cold start before the app could answer its first request.
+     */
     @EventListener(ApplicationReadyEvent.class)
+    @Async
     public void onStartup() {
-        // Automatically sync on startup if database has less than 15 jobs
-        long count = jobRepository.count();
-        if (count <= 10) {
-            log.info("Initial database has {} jobs. Automatically fetching live jobs from external APIs...", count);
-            try {
-                syncExternalJobs();
-            } catch (Exception e) {
-                log.warn("Failed to sync external jobs on startup: {}", e.getMessage());
+        try {
+            long count = jobRepository.count();
+            if (count <= 10) {
+                log.info("Database has {} jobs; fetching live postings in the background...", count);
+                syncExternalJobs(null);
             }
+        } catch (Exception e) {
+            log.warn("Background job sync on startup failed: {}", e.getMessage());
         }
     }
 
-    @Transactional
     public Map<String, Object> syncExternalJobs() {
-        int arbeitnowCount = 0;
-        int remotiveCount = 0;
-
-        // 1. Fetch from Arbeitnow (European Tech Jobs & Visa Sponsorship)
+        UserProfile profile = null;
         try {
-            arbeitnowCount = fetchArbeitnowJobs();
+            profile = profileService.getCurrentOrCreateProfile();
         } catch (Exception e) {
-            log.error("Error fetching from Arbeitnow API: {}", e.getMessage());
+            log.debug("No profile available to steer the job sync: {}", e.getMessage());
         }
+        return syncExternalJobs(profile);
+    }
 
-        // 2. Fetch from Remotive (Global Remote Tech Jobs with USD Salaries)
-        try {
-            remotiveCount = fetchRemotiveJobs();
-        } catch (Exception e) {
-            log.error("Error fetching from Remotive API: {}", e.getMessage());
-        }
+    /**
+     * Pulls postings from every configured source. When a profile is supplied, the industry-indexed
+     * boards are queried with that candidate's field first so the results are relevant to them.
+     */
+    @Transactional
+    public Map<String, Object> syncExternalJobs(UserProfile profile) {
+        FieldProfile field = FieldProfile.forProfile(profile);
+        log.info("Syncing external jobs for field '{}' (keywords: {})", field.label(), field.keywords);
 
+        Map<String, Integer> perSource = new LinkedHashMap<>();
+        perSource.put("Remotive", runSource("Remotive", () -> fetchRemotive(field)));
+        perSource.put("Jobicy", runSource("Jobicy", () -> fetchJobicy(field)));
+        perSource.put("RemoteOK", runSource("RemoteOK", () -> fetchRemoteOk(field)));
+        perSource.put("TheMuse", runSource("TheMuse", () -> fetchTheMuse(field)));
+        perSource.put("Arbeitnow", runSource("Arbeitnow", () -> fetchArbeitnow(field)));
+
+        int added = perSource.values().stream().mapToInt(Integer::intValue).sum();
         long total = jobRepository.count();
-        return Map.of(
-                "success", true,
-                "message", String.format("Đã đồng bộ thành công %d việc làm từ Arbeitnow (EU/Visa) và %d việc làm từ Remotive (Remote Global).", arbeitnowCount, remotiveCount),
-                "totalJobsInDatabase", total
-        );
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("success", true);
+        result.put("added", added);
+        result.put("perSource", perSource);
+        result.put("field", field.label());
+        result.put("totalJobsInDatabase", total);
+        result.put("message", String.format(
+                "Đã thêm %d việc làm mới từ %d nguồn (Remotive, Jobicy, RemoteOK, The Muse, Arbeitnow) cho lĩnh vực: %s.",
+                added, perSource.size(), field.label()));
+        return result;
     }
 
-    private int fetchArbeitnowJobs() {
-        String url = "https://www.arbeitnow.com/api/job-board-api";
-        RestClient client = RestClient.builder().build();
-
-        String response = client.get()
-                .uri(url)
-                .retrieve()
-                .body(String.class);
-
-        int added = 0;
+    private int runSource(String name, SourceFetcher fetcher) {
         try {
-            JsonNode root = objectMapper.readTree(response);
-            JsonNode data = root.path("data");
-            if (data.isArray()) {
-                for (JsonNode node : data) {
-                    String title = node.path("title").asText("");
-                    String company = node.path("company_name").asText("Tech Company");
-                    String applyUrl = node.path("url").asText("");
-
-                    // Check if job already exists by title and company
-                    if (title.isBlank() || jobRepository.searchJobs(title, null, null, null).stream().anyMatch(j -> j.getCompany().equalsIgnoreCase(company))) {
-                        continue;
-                    }
-
-                    JobOpportunity job = new JobOpportunity();
-                    job.setTitle(title);
-                    job.setCompany(company);
-                    job.setCompanyLogo("https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=120&auto=format&fit=crop&q=60");
-
-                    String location = node.path("location").asText("Germany");
-                    job.setLocation(location);
-                    job.setCountry("Germany / Europe");
-                    job.setIsOverseas(true);
-
-                    boolean remote = node.path("remote").asBoolean(false);
-                    job.setWorkType(remote ? "REMOTE" : "HYBRID");
-
-                    boolean visa = node.path("visa_sponsorship").asBoolean(false);
-                    job.setVisaSponsorship(visa);
-                    job.setRelocationAssistance(visa);
-
-                    job.setSalaryRange("EUR 60,000 - 85,000 / year");
-                    job.setExperienceLevel("Mid to Senior (3-5 yrs)");
-                    job.setMinYearsExp(3);
-
-                    // Extract tags for skills
-                    List<String> skills = new ArrayList<>();
-                    JsonNode tags = node.path("tags");
-                    if (tags.isArray()) {
-                        for (JsonNode t : tags) {
-                            String skill = t.asText().trim();
-                            if (!skill.equalsIgnoreCase("remote") && !skill.equalsIgnoreCase("full time")) {
-                                skills.add(skill);
-                            }
-                        }
-                    }
-                    if (skills.isEmpty()) {
-                        skills.addAll(List.of("Java", "React", "Docker", "SQL", "Git"));
-                    }
-                    job.setRequiredSkills(String.join(", ", skills.subList(0, Math.min(6, skills.size()))));
-                    job.setPreferredSkills("AWS, Kubernetes, CI/CD, Agile");
-
-                    job.setLanguageRequirements("English (Professional Working)");
-                    String rawDesc = node.path("description").asText("");
-                    // Strip HTML tags for clean display
-                    String cleanDesc = rawDesc.replaceAll("<[^>]*>", " ").replaceAll("\\s+", " ").trim();
-                    if (cleanDesc.length() > 600) {
-                        cleanDesc = cleanDesc.substring(0, 600) + "...";
-                    }
-                    job.setDescription(cleanDesc.isEmpty() ? "Tham gia phát triển sản phẩm công nghệ quốc tế tại châu Âu." : cleanDesc);
-                    job.setRequirements("Tối thiểu 3 năm kinh nghiệm trong lĩnh vực công nghệ thông tin; tư duy Clean Code và giải quyết vấn đề độc lập.");
-                    job.setBenefits("Môi trường làm việc quốc tế 100% tiếng Anh; hỗ trợ chi phí chuyển vùng định cư (nếu có tài trợ visa); bảo hiểm y tế toàn diện.");
-                    job.setApplyUrl(applyUrl);
-                    job.setSource("Arbeitnow API (EU)");
-                    job.setPostedAt(LocalDateTime.now());
-
-                    jobRepository.save(job);
-                    added++;
-                    if (added >= 10) break; // Limit per sync batch
-                }
-            }
+            int added = fetcher.fetch();
+            log.info("Source {} contributed {} new jobs", name, added);
+            return added;
         } catch (Exception e) {
-            log.error("Failed to parse Arbeitnow response: {}", e.getMessage());
+            log.warn("Source {} failed: {}", name, e.toString());
+            return 0;
+        }
+    }
+
+    @FunctionalInterface
+    private interface SourceFetcher {
+        int fetch() throws Exception;
+    }
+
+    // ---------------------------------------------------------------------
+    // Source 1: Remotive - 30 categories covering medical, legal, finance, education, supply chain
+    // ---------------------------------------------------------------------
+
+    private int fetchRemotive(FieldProfile field) {
+        int added = 0;
+        for (String category : field.remotiveCategories) {
+            String url = "https://remotive.com/api/remote-jobs?limit=20&category=" + urlEncode(category);
+            JsonNode root = getJson(url);
+            if (root == null) continue;
+
+            for (JsonNode node : root.path("jobs")) {
+                JobOpportunity job = new JobOpportunity();
+                job.setTitle(text(node, "title"));
+                job.setCompany(text(node, "company_name"));
+                job.setCompanyLogo(text(node, "company_logo"));
+
+                String requiredLocation = textOr(node, "candidate_required_location", "Worldwide");
+                job.setLocation("Remote (" + requiredLocation + ")");
+                job.setCountry(requiredLocation);
+                job.setIsOverseas(true);
+                job.setWorkType("REMOTE");
+                job.setSalaryRange(blankToNull(text(node, "salary")));
+                job.setCategory(prettifyCategory(category));
+                job.setRequiredSkillList(readTags(node.path("tags"), 8));
+                job.setDescription(cleanHtml(text(node, "description")));
+                job.setApplyUrl(text(node, "url"));
+                job.setSource("Remotive");
+                job.setVisaSponsorship(false);
+                applyDerivedFields(job);
+
+                if (save(job)) added++;
+                if (added >= 60) return added;
+            }
         }
         return added;
     }
 
-    private int fetchRemotiveJobs() {
-        String url = "https://remotive.com/api/remote-jobs?category=software-dev&limit=25";
-        RestClient client = RestClient.builder().build();
+    // ---------------------------------------------------------------------
+    // Source 2: Jobicy - industry-indexed remote board
+    // ---------------------------------------------------------------------
 
-        String response = client.get()
-                .uri(url)
-                .retrieve()
-                .body(String.class);
+    private int fetchJobicy(FieldProfile field) {
+        int added = 0;
+        List<String> queries = new ArrayList<>();
+        for (String industry : field.jobicyIndustries) {
+            queries.add("https://jobicy.com/api/v2/remote-jobs?count=20&industry=" + urlEncode(industry));
+        }
+        for (String keyword : field.keywords.subList(0, Math.min(2, field.keywords.size()))) {
+            queries.add("https://jobicy.com/api/v2/remote-jobs?count=20&tag=" + urlEncode(keyword));
+        }
+
+        for (String url : queries) {
+            JsonNode root = getJson(url);
+            if (root == null) continue;
+
+            for (JsonNode node : root.path("jobs")) {
+                JobOpportunity job = new JobOpportunity();
+                job.setTitle(text(node, "jobTitle"));
+                job.setCompany(text(node, "companyName"));
+                job.setCompanyLogo(text(node, "companyLogo"));
+                String geo = textOr(node, "jobGeo", "Anywhere");
+                job.setLocation("Remote (" + geo + ")");
+                job.setCountry(geo);
+                job.setIsOverseas(true);
+                job.setWorkType("REMOTE");
+                job.setCategory(firstOfArray(node.path("jobIndustry")));
+                job.setRequiredSkillList(readTags(node.path("jobType"), 4));
+                job.setDescription(cleanHtml(text(node, "jobExcerpt")));
+                job.setApplyUrl(text(node, "url"));
+                job.setSource("Jobicy");
+                job.setVisaSponsorship(false);
+
+                // Jobicy publishes a numeric salary range only when the employer disclosed one.
+                String min = text(node, "annualSalaryMin");
+                String max = text(node, "annualSalaryMax");
+                String currency = textOr(node, "salaryCurrency", "USD");
+                if (notBlank(min) && notBlank(max)) {
+                    job.setSalaryRange(currency + " " + min + " - " + max + " / year");
+                }
+                applyDerivedFields(job);
+
+                if (save(job)) added++;
+                if (added >= 40) return added;
+            }
+        }
+        return added;
+    }
+
+    // ---------------------------------------------------------------------
+    // Source 3: Remote OK - design, marketing, sales and finance alongside engineering
+    // ---------------------------------------------------------------------
+
+    private int fetchRemoteOk(FieldProfile field) {
+        JsonNode root = getJson("https://remoteok.com/api");
+        if (root == null || !root.isArray()) {
+            return 0;
+        }
 
         int added = 0;
-        try {
-            JsonNode root = objectMapper.readTree(response);
-            JsonNode jobs = root.path("jobs");
-            if (jobs.isArray()) {
-                for (JsonNode node : jobs) {
-                    String title = node.path("title").asText("");
-                    String company = node.path("company_name").asText("Global Tech");
-                    String applyUrl = node.path("url").asText("");
+        int index = 0;
+        for (JsonNode node : root) {
+            // The first element of the feed is Remote OK's legal notice, not a job.
+            if (index++ == 0 && node.has("legal")) continue;
 
-                    if (title.isBlank() || jobRepository.searchJobs(title, null, null, null).stream().anyMatch(j -> j.getCompany().equalsIgnoreCase(company))) {
-                        continue;
-                    }
+            String title = text(node, "position");
+            if (!notBlank(title)) continue;
 
+            List<String> tags = readTags(node.path("tags"), 8);
+            // The feed is large and mostly software, so keep the entries that match this field.
+            if (!field.matches(title + " " + String.join(" ", tags))) continue;
+
+            JobOpportunity job = new JobOpportunity();
+            job.setTitle(title);
+            job.setCompany(text(node, "company"));
+            job.setCompanyLogo(text(node, "company_logo"));
+            String location = textOr(node, "location", "Worldwide");
+            job.setLocation("Remote (" + location + ")");
+            job.setCountry(location);
+            job.setIsOverseas(true);
+            job.setWorkType("REMOTE");
+            job.setRequiredSkillList(tags);
+            job.setDescription(cleanHtml(text(node, "description")));
+            job.setApplyUrl(text(node, "url"));
+            job.setSource("RemoteOK");
+            job.setVisaSponsorship(false);
+            // Classify from the posting itself. Stamping the candidate's own field here would make
+            // every imported job look like a match for them.
+            job.setCategory(CareerField.classify(title + " " + String.join(" ", tags)).label());
+
+            long salaryMin = node.path("salary_min").asLong(0);
+            long salaryMax = node.path("salary_max").asLong(0);
+            if (salaryMin > 0 && salaryMax > 0) {
+                job.setSalaryRange(String.format("USD %,d - %,d / year", salaryMin, salaryMax));
+            }
+            applyDerivedFields(job);
+
+            if (save(job)) added++;
+            if (added >= 30) break;
+        }
+        return added;
+    }
+
+    // ---------------------------------------------------------------------
+    // Source 4: The Muse - the widest non-IT coverage (healthcare, legal, energy, maintenance,
+    // science and engineering), and the only source here with onsite roles at named employers.
+    // ---------------------------------------------------------------------
+
+    private int fetchTheMuse(FieldProfile field) {
+        int added = 0;
+        for (String category : field.museCategories) {
+            for (int page = 1; page <= 2; page++) {
+                String url = "https://www.themuse.com/api/public/jobs?page=" + page
+                        + "&category=" + urlEncode(category);
+                JsonNode root = getJson(url);
+                if (root == null) continue;
+
+                for (JsonNode node : root.path("results")) {
                     JobOpportunity job = new JobOpportunity();
-                    job.setTitle(title);
-                    job.setCompany(company);
-                    job.setCompanyLogo("https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=120&auto=format&fit=crop&q=60");
+                    job.setTitle(text(node, "name"));
+                    job.setCompany(text(node.path("company"), "name"));
 
-                    String reqLoc = node.path("candidate_required_location").asText("Worldwide");
-                    job.setLocation("Remote (" + reqLoc + ")");
-                    job.setCountry(reqLoc.contains("USA") ? "United States" : "Global");
-                    job.setIsOverseas(true);
-                    job.setWorkType("REMOTE");
-
-                    String salary = node.path("salary").asText("");
-                    if (salary.isBlank()) {
-                        salary = "$4,500 - $7,000 / month ($54k - $84k/yr)";
+                    List<String> locations = new ArrayList<>();
+                    for (JsonNode loc : node.path("locations")) {
+                        String name = text(loc, "name");
+                        if (notBlank(name)) locations.add(name);
                     }
-                    job.setSalaryRange(salary);
-                    job.setExperienceLevel("Senior (4+ yrs)");
-                    job.setMinYearsExp(3);
+                    String primaryLocation = locations.isEmpty() ? "Not stated" : locations.get(0);
+                    job.setLocation(primaryLocation);
+                    job.setCountry(countryFromLocation(primaryLocation));
+                    boolean remote = primaryLocation.toLowerCase(Locale.ROOT).contains("remote")
+                            || primaryLocation.toLowerCase(Locale.ROOT).contains("flexible");
+                    job.setWorkType(remote ? "REMOTE" : "ONSITE");
+                    job.setIsOverseas(!primaryLocation.toLowerCase(Locale.ROOT).contains("vietnam"));
 
-                    // Extract skills from tags
-                    List<String> skills = new ArrayList<>();
-                    JsonNode tags = node.path("tags");
-                    if (tags.isArray()) {
-                        for (JsonNode t : tags) {
-                            String skill = t.asText().trim();
-                            if (skill.length() <= 20) {
-                                skills.add(skill);
-                            }
-                        }
-                    }
-                    if (skills.isEmpty()) {
-                        skills.addAll(List.of("React", "TypeScript", "Node.js", "Docker", "REST API"));
-                    }
-                    job.setRequiredSkills(String.join(", ", skills.subList(0, Math.min(6, skills.size()))));
-                    job.setPreferredSkills("Microservices, Cloud, DevOps, Unit Testing");
-
+                    job.setCategory(firstOfObjectArray(node.path("categories")));
+                    job.setExperienceLevel(firstOfObjectArray(node.path("levels")));
+                    job.setDescription(cleanHtml(text(node, "contents")));
+                    job.setApplyUrl(text(node.path("refs"), "landing_page"));
+                    job.setSource("The Muse");
                     job.setVisaSponsorship(false);
-                    job.setRelocationAssistance(false);
-                    job.setLanguageRequirements("English (Fluent verbal & written)");
+                    applyDerivedFields(job);
 
-                    String rawDesc = node.path("description").asText("");
-                    String cleanDesc = rawDesc.replaceAll("<[^>]*>", " ").replaceAll("\\s+", " ").trim();
-                    if (cleanDesc.length() > 600) {
-                        cleanDesc = cleanDesc.substring(0, 600) + "...";
-                    }
-                    job.setDescription(cleanDesc.isEmpty() ? "Làm việc từ xa 100% cho sản phẩm công nghệ toàn cầu." : cleanDesc);
-                    job.setRequirements("Kinh nghiệm làm việc độc lập tốt trong môi trường Agile/Scrum phân tán toàn cầu; khả năng giao tiếp tiếng Anh trôi chảy.");
-                    job.setBenefits("Thu nhập cạnh tranh bằng USD; tự do lựa chọn nơi làm việc tại nhà; ngân sách trang bị thiết bị văn phòng và khóa học công nghệ.");
-                    job.setApplyUrl(applyUrl);
-                    job.setSource("Remotive API (Global)");
-                    job.setPostedAt(LocalDateTime.now());
-
-                    jobRepository.save(job);
-                    added++;
-                    if (added >= 10) break;
+                    if (save(job)) added++;
+                    if (added >= 45) return added;
                 }
             }
-        } catch (Exception e) {
-            log.error("Failed to parse Remotive response: {}", e.getMessage());
         }
         return added;
+    }
+
+    // ---------------------------------------------------------------------
+    // Source 5: Arbeitnow - European roles, some with visa sponsorship
+    // ---------------------------------------------------------------------
+
+    private int fetchArbeitnow(FieldProfile field) {
+        JsonNode root = getJson("https://www.arbeitnow.com/api/job-board-api");
+        if (root == null) {
+            return 0;
+        }
+
+        int added = 0;
+        for (JsonNode node : root.path("data")) {
+            String title = text(node, "title");
+            if (!notBlank(title)) continue;
+
+            List<String> tags = readTags(node.path("tags"), 8);
+            if (!field.matches(title + " " + String.join(" ", tags))) continue;
+
+            JobOpportunity job = new JobOpportunity();
+            job.setTitle(title);
+            job.setCompany(text(node, "company_name"));
+            job.setLocation(textOr(node, "location", "Germany"));
+            job.setCountry("Germany / Europe");
+            job.setIsOverseas(true);
+            job.setWorkType(node.path("remote").asBoolean(false) ? "REMOTE" : "ONSITE");
+
+            boolean visa = node.path("visa_sponsorship").asBoolean(false);
+            job.setVisaSponsorship(visa);
+            job.setRelocationAssistance(visa);
+            job.setRequiredSkillList(tags);
+            job.setDescription(cleanHtml(text(node, "description")));
+            job.setApplyUrl(text(node, "url"));
+            job.setSource("Arbeitnow");
+            job.setCategory(CareerField.classify(title + " " + String.join(" ", tags)).label());
+            applyDerivedFields(job);
+
+            if (save(job)) added++;
+            if (added >= 25) break;
+        }
+        return added;
+    }
+
+    // ---------------------------------------------------------------------
+    // Persistence helpers
+    // ---------------------------------------------------------------------
+
+    private boolean save(JobOpportunity job) {
+        if (!notBlank(job.getTitle()) || !notBlank(job.getCompany())) {
+            return false;
+        }
+        // Indexed existence check. The previous importer called searchJobs(title, ...) for every
+        // candidate row, scanning the whole table once per posting.
+        if (jobRepository.existsByTitleIgnoreCaseAndCompanyIgnoreCase(job.getTitle(), job.getCompany())) {
+            return false;
+        }
+        job.setPostedAt(LocalDateTime.now());
+        jobRepository.save(job);
+        return true;
+    }
+
+    /** Fills only what can be inferred from the posting itself; leaves the rest empty. */
+    private void applyDerivedFields(JobOpportunity job) {
+        if (job.getMinYearsExp() == null) {
+            job.setMinYearsExp(inferMinYears(job.getTitle(), job.getDescription()));
+        }
+        if (!notBlank(job.getExperienceLevel())) {
+            job.setExperienceLevel(inferLevel(job.getTitle()));
+        }
+        if (job.getDescription() != null && job.getDescription().length() > 1200) {
+            job.setDescription(job.getDescription().substring(0, 1200) + "...");
+        }
+    }
+
+    private int inferMinYears(String title, String description) {
+        String haystack = ((title == null ? "" : title) + " " + (description == null ? "" : description))
+                .toLowerCase(Locale.ROOT);
+        java.util.regex.Matcher m = java.util.regex.Pattern
+                .compile("(\\d{1,2})\\s*\\+?\\s*(?:-|to)?\\s*\\d{0,2}\\s*years?(?:\\s+of)?\\s+experience")
+                .matcher(haystack);
+        if (m.find()) {
+            try {
+                return Math.min(Integer.parseInt(m.group(1)), 20);
+            } catch (NumberFormatException ignored) {
+                // fall through to the title heuristic
+            }
+        }
+        if (haystack.contains("intern") || haystack.contains("graduate") || haystack.contains("entry level")) return 0;
+        if (haystack.contains("junior")) return 1;
+        if (haystack.contains("principal") || haystack.contains("staff") || haystack.contains("director")) return 8;
+        if (haystack.contains("senior") || haystack.contains("lead")) return 5;
+        return 2;
+    }
+
+    private String inferLevel(String title) {
+        String lower = title == null ? "" : title.toLowerCase(Locale.ROOT);
+        if (lower.contains("intern")) return "Internship";
+        if (lower.contains("junior") || lower.contains("graduate") || lower.contains("entry")) return "Entry level";
+        if (lower.contains("principal") || lower.contains("staff") || lower.contains("head")) return "Principal / Staff";
+        if (lower.contains("senior") || lower.contains("sr.") || lower.contains("lead")) return "Senior";
+        return "Mid level";
+    }
+
+    // ---------------------------------------------------------------------
+    // HTTP + JSON helpers
+    // ---------------------------------------------------------------------
+
+    private JsonNode getJson(String url) {
+        try {
+            String response = client().get().uri(url).retrieve().body(String.class);
+            return response == null ? null : objectMapper.readTree(response);
+        } catch (Exception e) {
+            log.warn("GET {} failed: {}", url, e.getMessage());
+            return null;
+        }
+    }
+
+    private static String text(JsonNode node, String fieldName) {
+        return node.path(fieldName).asText("");
+    }
+
+    private static String textOr(JsonNode node, String fieldName, String fallback) {
+        String value = node.path(fieldName).asText("");
+        return notBlank(value) ? value : fallback;
+    }
+
+    private static List<String> readTags(JsonNode tags, int limit) {
+        List<String> result = new ArrayList<>();
+        if (tags.isArray()) {
+            for (JsonNode tag : tags) {
+                String value = tag.asText("").trim();
+                if (value.isEmpty() || value.length() > 40) continue;
+                if (value.equalsIgnoreCase("remote") || value.equalsIgnoreCase("full time")
+                        || value.equalsIgnoreCase("full-time")) continue;
+                result.add(value);
+                if (result.size() >= limit) break;
+            }
+        } else if (tags.isTextual()) {
+            String value = tags.asText("").trim();
+            if (!value.isEmpty()) result.add(value);
+        }
+        return result;
+    }
+
+    private static String firstOfArray(JsonNode array) {
+        if (array.isArray() && !array.isEmpty()) {
+            return array.get(0).asText("");
+        }
+        return array.isTextual() ? array.asText("") : null;
+    }
+
+    private static String firstOfObjectArray(JsonNode array) {
+        if (array.isArray() && !array.isEmpty()) {
+            return array.get(0).path("name").asText("");
+        }
+        return null;
+    }
+
+    private static String cleanHtml(String raw) {
+        if (raw == null) return null;
+        String clean = raw.replaceAll("<[^>]*>", " ")
+                .replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
+                .replace("&nbsp;", " ").replace("&#039;", "'").replace("&quot;", "\"")
+                .replaceAll("\\s+", " ")
+                .trim();
+        return clean.isEmpty() ? null : clean;
+    }
+
+    private static String countryFromLocation(String location) {
+        if (location == null || location.isBlank()) return "Not stated";
+        String[] parts = location.split(",");
+        String last = parts[parts.length - 1].trim();
+        // A two-letter tail is a US state abbreviation, e.g. "Austin, TX".
+        if (last.length() == 2 && last.equals(last.toUpperCase(Locale.ROOT))) {
+            return "United States";
+        }
+        return last.isEmpty() ? location : last;
+    }
+
+    private static String prettifyCategory(String slug) {
+        String[] words = slug.split("-");
+        StringBuilder sb = new StringBuilder();
+        for (String word : words) {
+            if (word.isEmpty()) continue;
+            if (sb.length() > 0) sb.append(' ');
+            sb.append(Character.toUpperCase(word.charAt(0))).append(word.substring(1));
+        }
+        return sb.toString();
+    }
+
+    private static String urlEncode(String value) {
+        return java.net.URLEncoder.encode(value, java.nio.charset.StandardCharsets.UTF_8);
+    }
+
+    private static boolean notBlank(String s) {
+        return s != null && !s.isBlank();
+    }
+
+    private static String blankToNull(String s) {
+        return notBlank(s) ? s : null;
+    }
+
+    // ---------------------------------------------------------------------
+    // Field routing: maps a candidate's field to each board's own taxonomy
+    // ---------------------------------------------------------------------
+
+    /**
+     * Pairs the candidate's {@link CareerField} with the keywords used to filter the feeds that
+     * cannot be queried by category (Remote OK and Arbeitnow return one large mixed list).
+     */
+    private record FieldProfile(CareerField field, String label, List<String> keywords,
+                                List<String> remotiveCategories, List<String> jobicyIndustries,
+                                List<String> museCategories) {
+
+        boolean matches(String haystack) {
+            if (keywords.isEmpty()) {
+                return true;
+            }
+            String lower = haystack.toLowerCase(Locale.ROOT);
+            return keywords.stream().anyMatch(k -> lower.contains(k.toLowerCase(Locale.ROOT)));
+        }
+
+        static FieldProfile forProfile(UserProfile profile) {
+            CareerField field = CareerField.classify(buildSignal(profile));
+            return new FieldProfile(field, field.label(), field.keywords(),
+                    field.remotiveCategories(), field.jobicyIndustries(), field.museCategories());
+        }
+
+        private static String buildSignal(UserProfile profile) {
+            if (profile == null) {
+                return "";
+            }
+            Set<String> parts = new LinkedHashSet<>();
+            if (profile.getIndustry() != null) parts.add(profile.getIndustry());
+            if (profile.getCurrentTitle() != null) parts.add(profile.getCurrentTitle());
+            if (profile.getTargetRoles() != null) parts.add(profile.getTargetRoles());
+            parts.addAll(profile.getSkillList());
+            return String.join(" ", parts);
+        }
     }
 }

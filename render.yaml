@@ -9,11 +9,19 @@ services:
     region: singapore
     branch: main
     autoDeploy: true
+    # Lets Render mark the instance healthy as soon as the web layer answers, without waiting on
+    # the database or the background job import.
+    healthCheckPath: /api/health
     envVars:
       - key: GEMINI_API_KEY
         sync: false
+      # gemini-3.5-flash allows only 20 requests/day on the free tier, which this app exhausts in
+      # minutes; after that every AI feature silently returns offline text. The lite models carry a
+      # much larger free allowance, and the backend falls through the list below on 429/404.
       - key: GEMINI_MODEL
-        value: gemini-3.5-flash
+        value: gemini-flash-lite-latest
+      - key: GEMINI_FALLBACK_MODELS
+        value: gemini-3.1-flash-lite,gemini-flash-latest,gemini-3.5-flash,gemini-2.5-flash
       - key: DATABASE_URL
         fromDatabase:
           name: aicareer-db
@@ -28,7 +36,7 @@ services:
     name: aicareer-frontend
     runtime: static
     rootDir: frontend
-    buildCommand: npm install && npm run build
+    buildCommand: npm ci && npm run build
     staticPublishPath: dist
     branch: main
     autoDeploy: true
@@ -36,6 +44,12 @@ services:
       - type: rewrite
         source: /*
         destination: /index.html
+    headers:
+      # Vite emits content-hashed filenames, so the built assets are safe to cache indefinitely.
+      # This is what makes repeat visits fast even while the backend is waking up.
+      - path: /assets/*
+        name: Cache-Control
+        value: public, max-age=31536000, immutable
     envVars:
       - key: VITE_API_BASE
         value: https://aicareer-backend-c0e3.onrender.com/api

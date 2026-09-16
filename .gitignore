@@ -16,6 +16,8 @@ frontend/yarn-error.log*
 
 # Backend
 backend/target/
+backend/data/
+backend/.env
 backend/.mvn/wrapper/maven-wrapper.jar
 *.class
 *.log
@@ -27,3 +29,6 @@ backend/.mvn/wrapper/maven-wrapper.jar
 # Temp
 *.tmp
 *.bak
+
+# Claude Code local tooling
+.claude/

@@ -44,9 +44,14 @@ public class ProfileController {
         }
         try {
             String text = cvParserService.extractTextFromFile(file);
+            if (text == null || text.replaceAll("\\s+", "").length() < 40) {
+                return ResponseEntity.badRequest().body(Map.of("error",
+                        "Khong doc duoc noi dung van ban tu CV. Neu day la ban scan/anh, hay dung file PDF co text."));
+            }
             ProfileDto parsedProfile = cvParserService.parseCvTextToProfile(text);
-            // Save automatically to current profile
-            UserProfile saved = profileService.saveOrUpdateProfile(parsedProfile);
+            // A CV describes a whole candidate, so replace the stored profile rather than merging
+            // field by field - otherwise the previous candidate's skills survive the upload.
+            UserProfile saved = profileService.replaceProfileFromCv(parsedProfile);
             return ResponseEntity.ok(profileService.toDto(saved));
         } catch (IOException e) {
             return ResponseEntity.internalServerError().body(Map.of("error", "Lỗi đọc tệp tin: " + e.getMessage()));

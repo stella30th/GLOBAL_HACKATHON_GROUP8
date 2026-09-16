@@ -47,7 +47,8 @@ public class JobOpportunity {
     private String benefits;
 
     private String applyUrl;
-    private String source; // e.g. "LinkedIn", "Direct", "WorkAbroad"
+    private String source; // e.g. "Remotive", "Jobicy", "The Muse", "Arbeitnow"
+    private String category; // Industry taxonomy from the source board, e.g. "Healthcare"
 
     private LocalDateTime postedAt;
 
@@ -56,6 +57,14 @@ public class JobOpportunity {
         if (postedAt == null) {
             postedAt = LocalDateTime.now();
         }
+    }
+
+    public String getCategory() {
+        return category;
+    }
+
+    public void setCategory(String category) {
+        this.category = category;
     }
 
     public List<String> getRequiredSkillList() {

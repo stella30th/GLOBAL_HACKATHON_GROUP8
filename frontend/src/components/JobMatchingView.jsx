@@ -59,13 +59,17 @@ export default function JobMatchingView({ profile, showToast }) {
     }
   };
 
-  const handleGenerateDeepDive = async (jobId) => {
-    if (deepDiveData[jobId]) return;
+  const handleGenerateDeepDive = async (jobId, { force = false } = {}) => {
+    if (deepDiveData[jobId] && !force) return;
     setLoadingDeepDive(true);
     try {
       const data = await fetchJobAiDeepDive(jobId);
       setDeepDiveData(prev => ({ ...prev, [jobId]: data }));
-      if (showToast) showToast('✨ Gemini 3.5 Flash generated personalized deep-dive for this role!');
+      if (showToast) {
+        showToast(data.generatedBy === 'gemini'
+          ? `✨ ${data.model || 'Gemini'} đã phân tích xong vị trí này!`
+          : '⚠️ AI tạm không khả dụng — đang hiển thị phân tích offline.');
+      }
     } catch (err) {
       console.error(err);
       if (showToast) showToast('Failed to fetch AI deep-dive: ' + err.message);
@@ -109,7 +113,11 @@ export default function JobMatchingView({ profile, showToast }) {
           title="Fetch live jobs from Arbeitnow (EU/Visa) and Remotive (Global Remote)"
         >
           {syncing ? <Loader2 className="animate-spin" size={15} /> : <RefreshCw size={15} />}
-          <span>{syncing ? 'Fetching Live APIs...' : '🔄 Sync Live Global Jobs (Arbeitnow & Remotive)'}</span>
+          <span>
+            {syncing
+              ? 'Đang lấy dữ liệu từ 5 nguồn…'
+              : '🔄 Đồng bộ việc làm (Remotive · Jobicy · RemoteOK · The Muse · Arbeitnow)'}
+          </span>
         </button>
       </div>
 
@@ -228,24 +236,32 @@ export default function JobMatchingView({ profile, showToast }) {
                     </div>
                   )}
 
-                  {/* Skills summary */}
-                  <div style={{ marginBottom: '1rem' }}>
-                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.35rem' }}>
-                      Matched ({item.matchedSkills.length}) & Gaps ({item.missingSkills.length}):
+                  {/* Skills summary. Hidden when the source posting lists no skills at all, since an
+                      empty "Matched (0) & Gaps (0)" row reads as a failed match rather than as
+                      missing data from the job board. */}
+                  {(item.matchedSkills.length > 0 || item.missingSkills.length > 0) ? (
+                    <div style={{ marginBottom: '1rem' }}>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.35rem' }}>
+                        Kỹ năng khớp ({item.matchedSkills.length}) &amp; còn thiếu ({item.missingSkills.length}):
+                      </div>
+                      <div className="tag-container">
+                        {item.matchedSkills.slice(0, 3).map((s) => (
+                          <span key={s} className="skill-tag skill-tag-matched">
+                            ✓ {s}
+                          </span>
+                        ))}
+                        {item.missingSkills.slice(0, 2).map((s) => (
+                          <span key={s} className="skill-tag skill-tag-missing">
+                            + {s}
+                          </span>
+                        ))}
+                      </div>
                     </div>
-                    <div className="tag-container">
-                      {item.matchedSkills.slice(0, 3).map((s) => (
-                        <span key={s} className="skill-tag skill-tag-matched">
-                          ✓ {s}
-                        </span>
-                      ))}
-                      {item.missingSkills.slice(0, 2).map((s) => (
-                        <span key={s} className="skill-tag skill-tag-missing">
-                          + {s}
-                        </span>
-                      ))}
+                  ) : (
+                    <div style={{ marginBottom: '1rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                      Tin tuyển dụng này không liệt kê kỹ năng cụ thể — hãy mở mô tả để xem yêu cầu chi tiết.
                     </div>
-                  </div>
+                  )}
 
                   {/* AI Quick Insight */}
                   <div
@@ -350,7 +366,8 @@ export default function JobMatchingView({ profile, showToast }) {
               </div>
             </div>
 
-            {/* Gemini 3.5 Flash Live Deep Dive Card */}
+            {/* Live AI deep dive. The header and toast below report which engine actually answered
+                rather than claiming Gemini unconditionally. */}
             <div
               style={{
                 background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.15) 0%, rgba(168, 85, 247, 0.1) 100%)',
@@ -363,7 +380,20 @@ export default function JobMatchingView({ profile, showToast }) {
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '0.75rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#c084fc', fontWeight: '700', fontSize: '0.95rem' }}>
                   <Sparkles size={18} />
-                  <span>Google Gemini 3.5 Flash Live Deep Dive & Interview Strategy</span>
+                  <span>Phân tích chuyên sâu &amp; chiến lược phỏng vấn</span>
+                  {deepDiveData[selectedMatch.job.id]?.generatedBy === 'gemini' && (
+                    <span className="ai-badge ai-badge-live">
+                      {deepDiveData[selectedMatch.job.id].model || 'Gemini'}
+                    </span>
+                  )}
+                  {deepDiveData[selectedMatch.job.id]?.generatedBy === 'offline' && (
+                    <span
+                      className="ai-badge ai-badge-offline"
+                      title={deepDiveData[selectedMatch.job.id].offlineReason || ''}
+                    >
+                      Phân tích offline
+                    </span>
+                  )}
                 </div>
                 {!deepDiveData[selectedMatch.job.id] && (
                   <button
@@ -373,7 +403,7 @@ export default function JobMatchingView({ profile, showToast }) {
                     style={{ background: 'linear-gradient(135deg, #8b5cf6, #6366f1)' }}
                   >
                     {loadingDeepDive ? <Loader2 className="animate-spin" size={14} /> : <Sparkles size={14} />}
-                    <span>{loadingDeepDive ? 'Gemini is analyzing...' : '⚡ Run Gemini Live Analysis'}</span>
+                    <span>{loadingDeepDive ? 'Đang phân tích…' : '⚡ Chạy phân tích AI'}</span>
                   </button>
                 )}
               </div>
@@ -381,7 +411,8 @@ export default function JobMatchingView({ profile, showToast }) {
               {loadingDeepDive ? (
                 <div style={{ padding: '1.5rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
                   <Sparkles className="animate-spin" size={24} style={{ margin: '0 auto 0.5rem', display: 'block', color: '#c084fc' }} />
-                  Gemini 3.5 Flash is examining candidate-job fit, immigration feasibility, and generating interview questions...
+                  AI đang đối chiếu hồ sơ của bạn với tin tuyển dụng này, đánh giá khả năng làm việc hợp pháp
+                  và soạn câu hỏi phỏng vấn…
                 </div>
               ) : deepDiveData[selectedMatch.job.id] ? (
                 <div>
@@ -420,15 +451,16 @@ export default function JobMatchingView({ profile, showToast }) {
 
                   <button
                     className="btn btn-outline btn-sm"
-                    onClick={() => handleGenerateDeepDive(selectedMatch.job.id)}
+                    onClick={() => handleGenerateDeepDive(selectedMatch.job.id, { force: true })}
                     style={{ fontSize: '0.75rem', marginTop: '0.25rem' }}
                   >
-                    <RefreshCw size={12} /> Re-Generate Analysis
+                    <RefreshCw size={12} /> Phân tích lại
                   </button>
                 </div>
               ) : (
                 <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', margin: 0 }}>
-                  Click <strong>"⚡ Run Gemini Live Analysis"</strong> above to prompt Gemini 3.5 Flash for a real-time, personalized breakdown of this job, custom interview questions, and relocation feasibility.
+                  Bấm <strong>"⚡ Chạy phân tích AI"</strong> ở trên để AI đối chiếu trực tiếp CV của bạn với tin
+                  tuyển dụng này: mức độ phù hợp thật, khoảng trống kỹ năng, câu hỏi phỏng vấn và điều kiện visa.
                 </p>
               )}
             </div>
