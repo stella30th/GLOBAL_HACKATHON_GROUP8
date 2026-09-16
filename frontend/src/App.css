@@ -419,8 +419,13 @@ textarea.form-control {
   width: 44px;
   height: 44px;
   border-radius: 10px;
-  object-fit: cover;
+  /* Logos are artwork, not photos: never crop them, and sit them on a light plate. Most company
+     logos are white or transparent PNGs, which were invisible against the dark card. */
+  object-fit: contain;
+  background: #ffffff;
+  padding: 4px;
   border: 1px solid rgba(255, 255, 255, 0.1);
+  flex-shrink: 0;
 }
 
 .job-title {
@@ -1057,4 +1062,130 @@ textarea.form-control {
     min-width: 0;
     flex: 1 1 100%;
   }
+}
+
+/* ---------------------------------------------------------------------------
+   Loading motion
+
+   The components were written with `className="animate-spin"`, a Tailwind
+   utility — but this project has no Tailwind and no matching keyframes, so every
+   spinner and "AI is thinking" sparkle rendered completely static and read as a
+   frozen UI. These are the missing definitions.
+   --------------------------------------------------------------------------- */
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin {
+  /* SVG icons default to a corner transform box, which makes them wobble instead of spin. */
+  transform-origin: 50% 50%;
+  animation: spin 0.85s linear infinite;
+}
+
+/* Sparkle used while the AI is working: a slow rise-and-fall rather than a
+   rotation, so a long wait reads as "thinking" instead of "loading". */
+@keyframes aiWave {
+  0%,
+  100% {
+    transform: translateY(0) scale(1) rotate(0deg);
+    opacity: 0.7;
+  }
+  30% {
+    transform: translateY(-7px) scale(1.12) rotate(-8deg);
+    opacity: 1;
+  }
+  60% {
+    transform: translateY(2px) scale(0.97) rotate(6deg);
+    opacity: 0.85;
+  }
+}
+
+.ai-wave {
+  transform-origin: 50% 50%;
+  animation: aiWave 1.8s ease-in-out infinite;
+  filter: drop-shadow(0 0 6px rgba(168, 85, 247, 0.45));
+}
+
+/* Three dots travelling as a wave, shown next to AI progress text. Continuous
+   motion is what tells the user the request is still alive. */
+.wave-dots {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 4px;
+  margin-left: 2px;
+}
+
+.wave-dots span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.45;
+  animation: waveDot 1.2s ease-in-out infinite;
+}
+
+.wave-dots span:nth-child(2) {
+  animation-delay: 0.16s;
+}
+
+.wave-dots span:nth-child(3) {
+  animation-delay: 0.32s;
+}
+
+@keyframes waveDot {
+  0%,
+  65%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+  30% {
+    transform: translateY(-7px);
+    opacity: 1;
+  }
+}
+
+/* A shimmer for the full-page "analysing" panels, so the whole block breathes
+   rather than a single icon carrying the impression of progress. */
+@keyframes shimmerText {
+  0%,
+  100% {
+    opacity: 0.62;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.loading-panel {
+  text-align: center;
+  padding: 4rem 1.5rem;
+  color: var(--text-secondary);
+  animation: shimmerText 2.2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-spin,
+  .ai-wave,
+  .wave-dots span,
+  .loading-panel {
+    animation-duration: 0.01ms;
+    animation-iteration-count: 1;
+  }
+}
+
+/* Generated fallback avatar for employers whose logo is missing or fails to load. */
+.company-avatar-fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: 0.02em;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  flex-shrink: 0;
+  user-select: none;
 }

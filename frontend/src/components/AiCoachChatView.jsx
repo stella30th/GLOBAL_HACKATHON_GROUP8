@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Send, Bot, User, Sparkles, Loader2 } from 'lucide-react';
 import { sendChatMessage } from '../api';
 
-export default function AiCoachChatView({ profile, isConnected }) {
+export default function AiCoachChatView({ profile }) {
   const buildWelcome = (p) => {
     const name = p?.fullName || 'there';
     const title = p?.currentTitle || 'candidate';
@@ -24,7 +24,6 @@ export default function AiCoachChatView({ profile, isConnected }) {
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [lastEngine, setLastEngine] = useState(null);
   const messagesEndRef = useRef(null);
 
   const scrollToBottom = () => {
@@ -58,12 +57,11 @@ export default function AiCoachChatView({ profile, isConnected }) {
       // Send only real exchanges as context; the welcome message is UI text, not conversation.
       const history = messages.filter((m) => m.generatedBy !== 'welcome').slice(-6);
       const res = await sendChatMessage(textToSend.trim(), history);
-      setLastEngine({ generatedBy: res.generatedBy, model: res.model });
       setMessages([
         ...updatedMessages,
         { role: 'assistant', content: res.reply, generatedBy: res.generatedBy, model: res.model },
       ]);
-    } catch (err) {
+    } catch {
       setMessages([
         ...updatedMessages,
         {
@@ -186,8 +184,13 @@ export default function AiCoachChatView({ profile, isConnected }) {
 
           {loading && (
             <div className="chat-bubble chat-bubble-ai" style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-              <Loader2 className="animate-spin" size={16} color="#818cf8" />
-              <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>AI is reviewing your profile and writing an answer…</span>
+              <Sparkles className="ai-wave" size={16} color="#818cf8" />
+              <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                AI is reviewing your profile and writing an answer
+              </span>
+              <span className="wave-dots" style={{ color: '#818cf8' }}>
+                <span /><span /><span />
+              </span>
             </div>
           )}
           <div ref={messagesEndRef} />

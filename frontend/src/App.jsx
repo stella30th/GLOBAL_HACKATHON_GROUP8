@@ -87,11 +87,9 @@ export default function App() {
     connect();
   };
 
-  const isConnected = status === STATUS.ONLINE;
-
   return (
     <div className="app-container">
-      <Navbar activeTab={activeTab} setActiveTab={setActiveTab} isConnected={isConnected} />
+      <Navbar activeTab={activeTab} setActiveTab={setActiveTab} />
 
       {status === STATUS.CONNECTING && (
         <div className="conn-banner conn-banner-waking">
@@ -145,12 +143,12 @@ export default function App() {
         )}
 
         {activeTab === 'matching' && (
-          <JobMatchingView profile={profile} showToast={showToast} isConnected={isConnected} />
+          <JobMatchingView profile={profile} showToast={showToast} />
         )}
 
-        {activeTab === 'audit' && <ResumeAuditView profile={profile} isConnected={isConnected} />}
+        {activeTab === 'audit' && <ResumeAuditView profile={profile} />}
 
-        {activeTab === 'chat' && <AiCoachChatView profile={profile} isConnected={isConnected} />}
+        {activeTab === 'chat' && <AiCoachChatView profile={profile} />}
       </main>
 
       {toast && (

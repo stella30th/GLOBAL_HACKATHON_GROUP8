@@ -28,8 +28,8 @@ export default function ResumeAuditView({ profile }) {
 
   if (loading) {
     return (
-      <div style={{ textAlign: 'center', padding: '4rem', color: 'var(--text-secondary)' }}>
-        <Sparkles className="animate-spin" size={32} style={{ margin: '0 auto 1rem', display: 'block', color: 'var(--accent-primary)' }} />
+      <div className="loading-panel">
+        <Sparkles className="ai-wave" size={32} style={{ margin: '0 auto 1rem', display: 'block', color: 'var(--accent-primary)' }} />
         AI is reviewing <strong>{profile?.fullName || 'your profile'}</strong>
         {profile?.industry ? <> against hiring standards in <strong>{profile.industry}</strong></> : null}…
       </div>

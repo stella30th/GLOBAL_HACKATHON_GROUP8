@@ -4,12 +4,12 @@ import {
   CheckCircle, AlertTriangle, ExternalLink, Sparkles, 
   X, Compass, ShieldCheck, ArrowRight, Plane, RefreshCw, Loader2
 } from 'lucide-react';
-import { fetchMatches, syncExternalJobs, fetchJobAiDeepDive } from '../api';
+import { fetchMatches, fetchJobAiDeepDive } from '../api';
+import CompanyLogo from './CompanyLogo';
 
 export default function JobMatchingView({ profile, showToast }) {
   const [matches, setMatches] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [syncing, setSyncing] = useState(false);
   const [keyword, setKeyword] = useState('');
   const [activeFilter, setActiveFilter] = useState('ALL'); // ALL, VN, OVERSEAS, REMOTE, VISA
   const [selectedMatch, setSelectedMatch] = useState(null);
@@ -44,20 +44,6 @@ export default function JobMatchingView({ profile, showToast }) {
     loadMatches();
   };
 
-  const handleSync = async () => {
-    setSyncing(true);
-    try {
-      const res = await syncExternalJobs();
-      if (showToast) {
-        showToast(res.message || 'Synced live job opportunities from global APIs! 🌐');
-      }
-      await loadMatches();
-    } catch (err) {
-      alert(err.message || 'Error syncing from external APIs');
-    } finally {
-      setSyncing(false);
-    }
-  };
 
   const handleGenerateDeepDive = async (jobId, { force = false } = {}) => {
     if (deepDiveData[jobId] && !force) return;
@@ -106,19 +92,6 @@ export default function JobMatchingView({ profile, showToast }) {
             AI engine matches your profile against live domestic and international opportunities, evaluating technical fit, skill gaps, and visa readiness.
           </p>
         </div>
-        <button
-          className="btn btn-outline btn-sm"
-          onClick={handleSync}
-          disabled={syncing || loading}
-          title="Fetch live jobs from Remotive, Jobicy, Remote OK, Himalayas, The Muse and Arbeitnow"
-        >
-          {syncing ? <Loader2 className="animate-spin" size={15} /> : <RefreshCw size={15} />}
-          <span>
-            {syncing
-              ? 'Fetching from 6 job boards…'
-              : '🔄 Sync jobs (Remotive · Jobicy · RemoteOK · Himalayas · The Muse · Arbeitnow)'}
-          </span>
-        </button>
       </div>
 
       {/* Filter Bar */}
@@ -179,8 +152,8 @@ export default function JobMatchingView({ profile, showToast }) {
 
       {/* Job Grid */}
       {loading ? (
-        <div style={{ textAlign: 'center', padding: '4rem', color: 'var(--text-secondary)' }}>
-          <Sparkles className="animate-spin" size={32} style={{ margin: '0 auto 1rem', display: 'block', color: 'var(--accent-primary)' }} />
+        <div className="loading-panel">
+          <Sparkles className="ai-wave" size={32} style={{ margin: '0 auto 1rem', display: 'block', color: 'var(--accent-primary)' }} />
           AI is evaluating match compatibility and calculating skill gaps...
         </div>
       ) : matches.length === 0 ? (
@@ -199,11 +172,7 @@ export default function JobMatchingView({ profile, showToast }) {
               <div key={job.id} className="job-card">
                 <div>
                   <div className="job-card-header">
-                    <img
-                      src={job.companyLogo || 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=120&auto=format&fit=crop&q=60'}
-                      alt={job.company}
-                      className="company-avatar"
-                    />
+                    <CompanyLogo company={job.company} src={job.companyLogo} size={44} radius={10} />
                     <div className={`match-score-badge ${getScoreClass(item.overallScore)}`}>
                       {item.overallScore}%
                     </div>
@@ -304,11 +273,7 @@ export default function JobMatchingView({ profile, showToast }) {
             </button>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
-              <img
-                src={selectedMatch.job.companyLogo || 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=120&auto=format&fit=crop&q=60'}
-                alt={selectedMatch.job.company}
-                style={{ width: '56px', height: '56px', borderRadius: '12px', objectFit: 'cover' }}
-              />
+              <CompanyLogo company={selectedMatch.job.company} src={selectedMatch.job.companyLogo} size={56} radius={12} />
               <div>
                 <h2 style={{ fontSize: '1.35rem', color: '#fff', marginBottom: '0.2rem' }}>
                   {selectedMatch.job.title}
@@ -410,9 +375,14 @@ export default function JobMatchingView({ profile, showToast }) {
 
               {loadingDeepDive ? (
                 <div style={{ padding: '1.5rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
-                  <Sparkles className="animate-spin" size={24} style={{ margin: '0 auto 0.5rem', display: 'block', color: '#c084fc' }} />
-                  AI is comparing your profile against this posting, assessing work authorisation
-                  and drafting interview questions…
+                  <Sparkles className="ai-wave" size={24} style={{ margin: '0 auto 0.5rem', display: 'block', color: '#c084fc' }} />
+                  <span>
+                    AI is comparing your profile against this posting, assessing work authorisation
+                    and drafting interview questions
+                  </span>
+                  <span className="wave-dots" style={{ color: '#c084fc' }}>
+                    <span /><span /><span />
+                  </span>
                 </div>
               ) : deepDiveData[selectedMatch.job.id] ? (
                 <div>
