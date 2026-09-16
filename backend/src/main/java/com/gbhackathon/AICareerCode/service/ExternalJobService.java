@@ -44,6 +44,14 @@ public class ExternalJobService {
 
     private static final Logger log = LoggerFactory.getLogger(ExternalJobService.class);
 
+    /**
+     * Optional key for The Muse. Their public API answers unauthenticated requests from a developer
+     * machine but returns 403 to this deployment's datacenter IP; a free key from
+     * https://www.themuse.com/developers/api/v2 restores access. Left empty the source is skipped.
+     */
+    @org.springframework.beans.factory.annotation.Value("${jobs.themuse.api-key:}")
+    private String theMuseApiKey;
+
     private final JobOpportunityRepository jobRepository;
     private final ProfileService profileService;
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -119,6 +127,7 @@ public class ExternalJobService {
         perSource.put("Remotive", runSource("Remotive", () -> fetchRemotive(field)));
         perSource.put("Jobicy", runSource("Jobicy", () -> fetchJobicy(field)));
         perSource.put("RemoteOK", runSource("RemoteOK", () -> fetchRemoteOk(field)));
+        perSource.put("Himalayas", runSource("Himalayas", () -> fetchHimalayas(field)));
         perSource.put("TheMuse", runSource("TheMuse", () -> fetchTheMuse(field)));
         perSource.put("Arbeitnow", runSource("Arbeitnow", () -> fetchArbeitnow(field)));
 
@@ -132,7 +141,7 @@ public class ExternalJobService {
         result.put("field", field.label());
         result.put("totalJobsInDatabase", total);
         result.put("message", String.format(
-                "Đã thêm %d việc làm mới từ %d nguồn (Remotive, Jobicy, RemoteOK, The Muse, Arbeitnow) cho lĩnh vực: %s.",
+                "Đã thêm %d việc làm mới từ %d nguồn (Remotive, Jobicy, RemoteOK, Himalayas, The Muse, Arbeitnow) cho lĩnh vực: %s.",
                 added, perSource.size(), field.label()));
         return result;
     }
@@ -297,7 +306,61 @@ public class ExternalJobService {
     }
 
     // ---------------------------------------------------------------------
-    // Source 4: The Muse - the widest non-IT coverage (healthcare, legal, energy, maintenance,
+    // Source 4: Himalayas - free, no key, carries salary bands and its own category tags
+    // ---------------------------------------------------------------------
+
+    private int fetchHimalayas(FieldProfile field) {
+        JsonNode root = getJson("https://himalayas.app/jobs/api?limit=100");
+        if (root == null) {
+            return 0;
+        }
+
+        int added = 0;
+        for (JsonNode node : root.path("jobs")) {
+            String title = text(node, "title");
+            if (!notBlank(title)) continue;
+
+            List<String> categories = readTags(node.path("categories"), 8);
+            if (!field.matches(title + " " + String.join(" ", categories))) continue;
+
+            JobOpportunity job = new JobOpportunity();
+            job.setTitle(title);
+            job.setCompany(text(node, "companyName"));
+            job.setCompanyLogo(text(node, "companyLogo"));
+
+            String restriction = firstOfArray(node.path("locationRestrictions"));
+            String where = notBlank(restriction) ? restriction : "Worldwide";
+            job.setLocation("Remote (" + where + ")");
+            job.setCountry(where);
+            job.setIsOverseas(true);
+            job.setWorkType("REMOTE");
+            job.setVisaSponsorship(false);
+
+            job.setRequiredSkillList(categories);
+            job.setCategory(CareerField.classify(title + " " + String.join(" ", categories)).label());
+            job.setExperienceLevel(firstOfArray(node.path("seniority")));
+            job.setDescription(cleanHtml(text(node, "description")));
+            job.setApplyUrl(text(node, "applicationLink"));
+            job.setSource("Himalayas");
+
+            // Salary is only recorded when the employer actually published a band.
+            long min = node.path("minSalary").asLong(0);
+            long max = node.path("maxSalary").asLong(0);
+            if (min > 0 && max > 0) {
+                String currency = textOr(node, "currency", "USD");
+                String period = textOr(node, "salaryPeriod", "yearly");
+                job.setSalaryRange(String.format("%s %,d - %,d / %s", currency, min, max, period));
+            }
+            applyDerivedFields(job);
+
+            if (save(job)) added++;
+            if (added >= 30) break;
+        }
+        return added;
+    }
+
+    // ---------------------------------------------------------------------
+    // Source 5: The Muse - the widest non-IT coverage (healthcare, legal, energy, maintenance,
     // science and engineering), and the only source here with onsite roles at named employers.
     // ---------------------------------------------------------------------
 
@@ -306,7 +369,8 @@ public class ExternalJobService {
         for (String category : field.museCategories) {
             for (int page = 1; page <= 2; page++) {
                 String url = "https://www.themuse.com/api/public/jobs?page=" + page
-                        + "&category=" + urlEncode(category);
+                        + "&category=" + urlEncode(category)
+                        + (notBlank(theMuseApiKey) ? "&api_key=" + urlEncode(theMuseApiKey.trim()) : "");
                 JsonNode root = getJson(url);
                 if (root == null) continue;
 
@@ -345,7 +409,7 @@ public class ExternalJobService {
     }
 
     // ---------------------------------------------------------------------
-    // Source 5: Arbeitnow - European roles, some with visa sponsorship
+    // Source 6: Arbeitnow - European roles, some with visa sponsorship
     // ---------------------------------------------------------------------
 
     private int fetchArbeitnow(FieldProfile field) {
@@ -481,7 +545,9 @@ public class ExternalJobService {
         endpoints.put("Remotive", "https://remotive.com/api/remote-jobs?limit=1&category=software-development");
         endpoints.put("Jobicy", "https://jobicy.com/api/v2/remote-jobs?count=1");
         endpoints.put("RemoteOK", "https://remoteok.com/api");
-        endpoints.put("TheMuse", "https://www.themuse.com/api/public/jobs?page=1");
+        endpoints.put("Himalayas", "https://himalayas.app/jobs/api?limit=1");
+        endpoints.put("TheMuse", "https://www.themuse.com/api/public/jobs?page=1"
+                + (notBlank(theMuseApiKey) ? "&api_key=" + urlEncode(theMuseApiKey.trim()) : ""));
         endpoints.put("Arbeitnow", "https://www.arbeitnow.com/api/job-board-api");
 
         for (Map.Entry<String, String> entry : endpoints.entrySet()) {

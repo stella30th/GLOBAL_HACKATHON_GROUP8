@@ -11,9 +11,9 @@
    (thiết kế vi mạch, cơ khí, tài chính, y tế, marketing, xây dựng…), trích xuất kỹ năng và công cụ
    thật sự có trong CV. Nếu AI không khả dụng, hệ thống dùng bộ từ điển đa ngành làm dự phòng và
    **để trống** những gì không tìm thấy thay vì suy đoán.
-2. **Ghép việc làm theo đúng ngành** — Lấy tin tuyển dụng trực tiếp từ **5 nguồn**: Remotive (30 nhóm
-   ngành), Jobicy, Remote OK, The Muse (y tế, tài chính, pháp lý, kỹ thuật, bảo trì…) và Arbeitnow
-   (châu Âu, có bảo lãnh visa). Điểm phù hợp được tính từ mức độ trùng ngành, kỹ năng, kinh nghiệm và
+2. **Ghép việc làm theo đúng ngành** — Lấy tin tuyển dụng trực tiếp từ **6 nguồn**: Remotive (30 nhóm
+   ngành), Jobicy, Remote OK, Himalayas, The Muse (y tế, tài chính, pháp lý, kỹ thuật, bảo trì…) và
+   Arbeitnow (châu Âu, có bảo lãnh visa). Điểm phù hợp được tính từ mức độ trùng ngành, kỹ năng, kinh nghiệm và
    khả năng làm việc hợp pháp.
 3. **Phân tích chuyên sâu từng vị trí** — AI đối chiếu CV với từng tin tuyển dụng cụ thể: điểm mạnh,
    khoảng trống, khả năng visa và câu hỏi phỏng vấn dự kiến.
@@ -35,6 +35,7 @@ dự phòng thành câu trả lời của AI.
 |---|---|---|
 | `GEMINI_API_KEY` | *(bắt buộc)* | Lấy tại [Google AI Studio](https://aistudio.google.com/apikey). Chỉ đặt trong biến môi trường, **không commit vào repo**. |
 | `GEMINI_MODEL` | `gemini-flash-lite-latest` | Model chính. |
+| `THE_MUSE_API_KEY` | *(không bắt buộc)* | The Muse trả **403** cho IP datacenter của Render. Lấy key miễn phí tại [themuse.com/developers](https://www.themuse.com/developers/api/v2) để dùng lại nguồn này; không có key thì 5 nguồn còn lại vẫn chạy bình thường. |
 | `GEMINI_FALLBACK_MODELS` | `gemini-3.1-flash-lite,gemini-flash-latest,gemini-3.5-flash,gemini-2.5-flash` | Danh sách dự phòng, thử lần lượt khi model chính bị 429 (hết quota) hoặc 404. |
 
 > ⚠️ **Lưu ý về quota:** `gemini-3.5-flash` ở gói miễn phí chỉ cho **20 request/ngày/project**. Khi hết,
@@ -109,7 +110,8 @@ echo "VITE_API_BASE=http://localhost:8099/api" > frontend/.env.local
 | `POST` | `/api/profiles/upload-cv` | Tải CV lên và phân tích |
 | `GET` | `/api/profiles/current` | Hồ sơ hiện tại |
 | `GET` | `/api/jobs` | Danh sách việc làm (lọc theo từ khoá, khu vực, hình thức, visa) |
-| `POST` | `/api/jobs/sync-external` | Đồng bộ tin tuyển dụng từ 5 nguồn |
+| `GET` | `/api/jobs/source-status` | Kiểm tra từng nguồn việc làm có bị chặn không |
+| `POST` | `/api/jobs/sync-external` | Đồng bộ tin tuyển dụng từ 6 nguồn |
 | `GET` | `/api/matches` | Điểm phù hợp cho hồ sơ hiện tại |
 | `GET` | `/api/matches/{id}/ai-deep-dive` | Phân tích chuyên sâu một vị trí |
 | `GET` | `/api/coach/audit` | Đánh giá CV và lộ trình |
