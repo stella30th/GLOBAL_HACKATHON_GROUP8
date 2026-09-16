@@ -64,9 +64,14 @@ public class ExternalJobService {
             factory.setReadTimeout(Duration.ofSeconds(20));
             restClient = RestClient.builder()
                     .requestFactory(factory)
-                    // Remote OK and The Muse reject requests without a browser-like agent.
-                    .defaultHeader("User-Agent", "AICareerCode/1.0 (+https://github.com/aicareercode)")
-                    .defaultHeader("Accept", "application/json")
+                    // Several of these boards sit behind Cloudflare and serve a bot challenge to
+                    // datacenter IPs presenting a non-browser agent. The same requests succeed from a
+                    // laptop and return nothing from Render, so send browser-like headers.
+                    .defaultHeader("User-Agent",
+                            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                                    + "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36")
+                    .defaultHeader("Accept", "application/json, text/plain, */*")
+                    .defaultHeader("Accept-Language", "en-US,en;q=0.9")
                     .build();
         }
         return restClient;
@@ -448,11 +453,77 @@ public class ExternalJobService {
     private JsonNode getJson(String url) {
         try {
             String response = client().get().uri(url).retrieve().body(String.class);
-            return response == null ? null : objectMapper.readTree(response);
+            if (response == null) {
+                log.warn("GET {} returned an empty body", url);
+                return null;
+            }
+            return objectMapper.readTree(response);
+        } catch (org.springframework.web.client.RestClientResponseException e) {
+            // A source returning 403/429 here is the difference between "no matching jobs" and
+            // "this board refuses our requests", and the two need very different responses.
+            log.warn("GET {} failed with HTTP {}: {}", url, e.getStatusCode().value(),
+                    truncate(e.getResponseBodyAsString(), 200));
+            return null;
         } catch (Exception e) {
-            log.warn("GET {} failed: {}", url, e.getMessage());
+            log.warn("GET {} failed: {}", url, e.toString());
             return null;
         }
+    }
+
+    /**
+     * Probes every source and reports what each one actually returned. Exposed through
+     * {@code GET /api/jobs/source-status} because a board can be reachable from a developer laptop
+     * and blocked from the deployment's datacenter IP, which is invisible from a job count alone.
+     */
+    public List<Map<String, Object>> probeSources() {
+        List<Map<String, Object>> results = new ArrayList<>();
+        Map<String, String> endpoints = new LinkedHashMap<>();
+        endpoints.put("Remotive", "https://remotive.com/api/remote-jobs?limit=1&category=software-development");
+        endpoints.put("Jobicy", "https://jobicy.com/api/v2/remote-jobs?count=1");
+        endpoints.put("RemoteOK", "https://remoteok.com/api");
+        endpoints.put("TheMuse", "https://www.themuse.com/api/public/jobs?page=1");
+        endpoints.put("Arbeitnow", "https://www.arbeitnow.com/api/job-board-api");
+
+        for (Map.Entry<String, String> entry : endpoints.entrySet()) {
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("source", entry.getKey());
+            result.put("url", entry.getValue());
+            long startedAt = System.currentTimeMillis();
+            try {
+                String body = client().get().uri(entry.getValue()).retrieve().body(String.class);
+                result.put("status", 200);
+                result.put("bytes", body == null ? 0 : body.length());
+                try {
+                    JsonNode root = objectMapper.readTree(body);
+                    JsonNode items = root.isArray() ? root
+                            : root.has("jobs") ? root.path("jobs")
+                            : root.has("data") ? root.path("data")
+                            : root.path("results");
+                    result.put("items", items.isArray() ? items.size() : 0);
+                    result.put("ok", true);
+                } catch (Exception parseError) {
+                    // A Cloudflare challenge arrives as HTML with a 200 status.
+                    result.put("ok", false);
+                    result.put("error", "Response was not JSON: " + truncate(body, 120));
+                }
+            } catch (org.springframework.web.client.RestClientResponseException e) {
+                result.put("ok", false);
+                result.put("status", e.getStatusCode().value());
+                result.put("error", truncate(e.getResponseBodyAsString(), 200));
+            } catch (Exception e) {
+                result.put("ok", false);
+                result.put("error", e.toString());
+            }
+            result.put("elapsedMs", System.currentTimeMillis() - startedAt);
+            results.add(result);
+        }
+        return results;
+    }
+
+    private static String truncate(String value, int max) {
+        if (value == null) return null;
+        String collapsed = value.replaceAll("\s+", " ").trim();
+        return collapsed.length() > max ? collapsed.substring(0, max) + "..." : collapsed;
     }
 
     private static String text(JsonNode node, String fieldName) {

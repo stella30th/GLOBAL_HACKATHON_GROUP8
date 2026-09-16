@@ -21,6 +21,16 @@ public class JobController {
         this.externalJobService = externalJobService;
     }
 
+    /**
+     * Reports what each job board actually returned. A source can work from a developer machine and
+     * be blocked from the deployment's datacenter IP, which a job count alone cannot distinguish
+     * from "no matching jobs".
+     */
+    @GetMapping("/source-status")
+    public ResponseEntity<?> getSourceStatus() {
+        return ResponseEntity.ok(externalJobService.probeSources());
+    }
+
     @PostMapping("/sync-external")
     public ResponseEntity<?> syncExternalJobs() {
         return ResponseEntity.ok(externalJobService.syncExternalJobs());
