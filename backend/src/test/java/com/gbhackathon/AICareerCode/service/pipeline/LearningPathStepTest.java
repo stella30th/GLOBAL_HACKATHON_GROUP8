@@ -217,6 +217,47 @@ class LearningPathStepTest {
                 problems.toString());
     }
 
+    @Test
+    void rejectsARegularPhaseThatDoesNotSayWhichGapsItCloses() {
+        LearningPathDto path = validPath();
+        path.phases.get(0).addressesGapIds = List.of();
+
+        List<String> problems = step.validate(path, GAP_IDS, RESOURCE_KEYS, 500, GRAPH);
+
+        assertTrue(problems.stream().anyMatch(p -> p.contains("does not say which gaps it closes")),
+                problems.toString());
+    }
+
+    @Test
+    void allowsReviewAndConsolidationPhaseWithoutAddressesGapIdsOrSkillNodeIds() {
+        LearningPathDto path = validPath();
+        LearningPathDto.Phase reviewPhase = phase(3, "Review and Consolidation", 9, 12, 20,
+                List.of("SQL"), List.of("n1"), "gap-a");
+        reviewPhase.addressesGapIds = List.of();
+        reviewPhase.skillNodeIds = List.of();
+        path.phases.add(reviewPhase);
+
+        List<String> problems = step.validate(path, GAP_IDS, RESOURCE_KEYS, 500, GRAPH);
+
+        assertTrue(problems.isEmpty(), problems.toString());
+    }
+
+    @Test
+    void rejectsAPlanWhenNoPhaseAddressesAnySkillGaps() {
+        LearningPathDto path = validPath();
+        path.phases.get(0).title = "Review Part 1";
+        path.phases.get(0).addressesGapIds = List.of();
+        path.phases.get(0).skillNodeIds = List.of();
+        path.phases.get(1).title = "Review Part 2";
+        path.phases.get(1).addressesGapIds = List.of();
+        path.phases.get(1).skillNodeIds = List.of();
+
+        List<String> problems = step.validate(path, GAP_IDS, RESOURCE_KEYS, 500, GRAPH);
+
+        assertTrue(problems.stream().anyMatch(p -> p.contains("does not address any of the identified skill gaps")),
+                problems.toString());
+    }
+
     /**
      * The graph decided the order; this is the check that the plan actually respected it. A phase
      * that needs a skill taught two phases later is the failure the whole graph step exists to

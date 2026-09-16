@@ -142,6 +142,10 @@ public class LearningPathStep {
                   Do not compress a year of work into the time available and present it as feasible.
                 - Never promise employment, a salary, or that the student will "be a %s" at the end.
                   Describe what they will be able to demonstrate.
+                - Every phase that teaches new skills must specify which gaps it closes in addressesGapIds
+                  using the exact gap ids provided. A review, consolidation, practice, or capstone phase
+                  that reinforces previously learned skills can either cite the relevant gap ids or leave
+                  addressesGapIds empty.
 
                 Order
                 - Respect the required learning order above. A phase may not teach a skill whose
@@ -150,7 +154,8 @@ public class LearningPathStep {
                   teaches, copied exactly from the list above. This is how the prerequisite check
                   is run, so a phase with no ids, or with an id that is not in the graph, is
                   rejected. A skill the graph has no node for is fine in "skills" and simply has
-                  no id here.
+                  no id here. A review, consolidation, or capstone phase that teaches no new skills
+                  can leave skillNodeIds empty.
 
                 Sources
                 - Cite only resourceKey values from the retrieved list. Any other key is rejected.
@@ -224,6 +229,12 @@ public class LearningPathStep {
             problems.add("expectedOutcome is required: say what the student will be able to show.");
         }
 
+        boolean anyPhaseAddressesGaps = path.phases.stream()
+                .anyMatch(p -> p != null && p.addressesGapIds != null && !p.addressesGapIds.isEmpty());
+        if (!gapIds.isEmpty() && !anyPhaseAddressesGaps) {
+            problems.add("The learning path does not address any of the identified skill gaps.");
+        }
+
         int totalHours = 0;
         int expectedOrder = 1;
         int previousEndWeek = 0;
@@ -256,6 +267,8 @@ public class LearningPathStep {
                         + "be numbered consecutively from 1. Expected " + expectedOrder + ".");
             }
             expectedOrder++;
+
+            boolean isReview = isReviewOrConsolidationPhase(phase);
 
             if (isBlank(phase.goal)) {
                 problems.add("Phase '" + phase.title + "' needs a goal saying what the student can do "
@@ -290,8 +303,10 @@ public class LearningPathStep {
             }
 
             if (phase.addressesGapIds == null || phase.addressesGapIds.isEmpty()) {
-                problems.add("Phase '" + phase.title + "' does not say which gaps it closes. Use the "
-                        + "gap ids exactly as given.");
+                if (!isReview) {
+                    problems.add("Phase '" + phase.title + "' does not say which gaps it closes. Use the "
+                            + "gap ids exactly as given.");
+                }
             } else {
                 for (String gapId : phase.addressesGapIds) {
                     if (!gapIds.contains(gapId)) {
@@ -328,9 +343,11 @@ public class LearningPathStep {
             // into a constraint the plan has to satisfy.
             if (!nodesById.isEmpty()) {
                 if (phase.skillNodeIds == null || phase.skillNodeIds.isEmpty()) {
-                    problems.add("Phase '" + phase.title + "' has no skillNodeIds. List the graph "
-                            + "node id for every skill it teaches, copied exactly from the learning "
-                            + "order above; the prerequisite check cannot run without them.");
+                    if (!isReview) {
+                        problems.add("Phase '" + phase.title + "' has no skillNodeIds. List the graph "
+                                + "node id for every skill it teaches, copied exactly from the learning "
+                                + "order above; the prerequisite check cannot run without them.");
+                    }
                 } else {
                     for (String nodeId : phase.skillNodeIds) {
                         SkillGraphDto.Node node = nodesById.get(nodeId);
@@ -455,6 +472,37 @@ public class LearningPathStep {
             log.warn("Could not serialise the gap list for the prompt: {}", e.getMessage());
             return "[]";
         }
+    }
+
+    private static final List<String> REVIEW_KEYWORDS = List.of(
+            "review", "consolidat", "capstone", "portfolio", "practice",
+            "wrap-up", "wrap up", "wrapup", "revision", "synthesis",
+            "integration", "final", "summary", "project", "assessment", "preparation"
+    );
+
+    private static boolean isReviewOrConsolidationPhase(LearningPathDto.Phase phase) {
+        if (phase == null) {
+            return false;
+        }
+        if (phase.skills == null || phase.skills.isEmpty()) {
+            return true;
+        }
+        String title = phase.title != null ? phase.title.toLowerCase(java.util.Locale.ROOT) : "";
+        String goal = phase.goal != null ? phase.goal.toLowerCase(java.util.Locale.ROOT) : "";
+        for (String keyword : REVIEW_KEYWORDS) {
+            if (title.contains(keyword) || goal.contains(keyword)) {
+                return true;
+            }
+        }
+        if (phase.activities != null && !phase.activities.isEmpty()) {
+            boolean allReviewOrPractice = phase.activities.stream()
+                    .allMatch(a -> a != null && ("REVIEW".equalsIgnoreCase(a.type)
+                            || "PRACTICE".equalsIgnoreCase(a.type)));
+            if (allReviewOrPractice) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static String normalise(String value) {
