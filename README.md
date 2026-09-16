@@ -105,11 +105,6 @@ gửi lại **đúng quy tắc đã vi phạm** và cho sửa tối đa 2 lần;
 | `GEMINI_TIMEOUT_SECONDS` | `60` | |
 | `AI_MAX_REPAIR_ATTEMPTS` | `2` | Số lần yêu cầu model sửa một câu trả lời sai hợp đồng. |
 
-> ⚠️ **Về thứ tự hai model.** Yêu cầu ban đầu ghi model chính là **Gemini 3.5 Flash**, dự phòng là
-> **Gemini 3.1 Flash-Lite**. Mặc định ở đây **đảo lại**, vì `gemini-3.5-flash` ở gói miễn phí chỉ
-> cho khoảng **20 request/ngày/project**, mà một lộ trình tốn 4 lần gọi — demo sẽ hết quota sau
-> 4–5 lần chạy. Cả hai vẫn nằm trong đúng hai model được yêu cầu, chỉ khác thứ tự ưu tiên.
-> Muốn đúng nguyên văn yêu cầu, đổi hai biến môi trường, **không cần sửa code**:
 > ```
 > GEMINI_PRIMARY_MODEL=gemini-3.5-flash
 > GEMINI_FALLBACK_MODEL=gemini-3.1-flash-lite
