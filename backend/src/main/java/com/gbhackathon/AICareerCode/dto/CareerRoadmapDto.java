@@ -7,6 +7,12 @@ import java.util.List;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class CareerRoadmapDto {
+    /**
+     * Server-issued UUID identifying this exact roadmap. The model never supplies it: the backend
+     * assigns ids after generation and before the snapshot is stored, so a milestone id means the
+     * same thing across a reload, a cache eviction and a restart.
+     */
+    private String roadmapId;
     private String targetGoal;
     @JsonAlias({"month3", "first3Months", "months_3"})
     private List<RoadmapMilestone> months3;
@@ -17,6 +23,8 @@ public class CareerRoadmapDto {
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class RoadmapMilestone {
+        /** Server-issued UUID. Never an array index or the title, both of which change wording. */
+        private String id;
         private String title;
         private String description;
         @JsonAlias({"type", "milestoneType"})
@@ -31,6 +39,14 @@ public class CareerRoadmapDto {
             this.description = description;
             this.category = category;
             this.estimatedHours = estimatedHours;
+        }
+
+        public String getId() {
+            return id;
+        }
+
+        public void setId(String id) {
+            this.id = id;
         }
 
         public String getTitle() {
@@ -64,6 +80,26 @@ public class CareerRoadmapDto {
         public void setEstimatedHours(String estimatedHours) {
             this.estimatedHours = estimatedHours;
         }
+    }
+
+    public String getRoadmapId() {
+        return roadmapId;
+    }
+
+    public void setRoadmapId(String roadmapId) {
+        this.roadmapId = roadmapId;
+    }
+
+    /** Every milestone across the three stages, in display order. */
+    public List<RoadmapMilestone> allMilestones() {
+        List<RoadmapMilestone> all = new java.util.ArrayList<>();
+        for (List<RoadmapMilestone> stage : List.of(
+                months3 != null ? months3 : List.<RoadmapMilestone>of(),
+                months6 != null ? months6 : List.<RoadmapMilestone>of(),
+                months12 != null ? months12 : List.<RoadmapMilestone>of())) {
+            all.addAll(stage);
+        }
+        return all;
     }
 
     public String getTargetGoal() {

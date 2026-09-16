@@ -1,12 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { 
-  Search, Filter, MapPin, DollarSign, Briefcase, 
-  CheckCircle, AlertTriangle, ExternalLink, Sparkles, 
-  X, Compass, ShieldCheck, ArrowRight, Plane, RefreshCw, Loader2
+  Search, DollarSign, Briefcase,
+  ExternalLink, Sparkles,
+  X, Compass, ShieldCheck, ArrowRight, Plane, RefreshCw, Loader2, Dumbbell
 } from 'lucide-react';
 import { fetchMatches, syncExternalJobs, fetchJobAiDeepDive } from '../api';
 
-export default function JobMatchingView({ profile, showToast }) {
+export default function JobMatchingView({ showToast, onPracticeQuestion }) {
   const [matches, setMatches] = useState([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
@@ -101,9 +101,11 @@ export default function JobMatchingView({ profile, showToast }) {
     <div>
       <div className="page-header">
         <div className="page-header-text">
-          <h1>Smart Job Matcher & Global Opportunities</h1>
+          <h1>Market opportunities</h1>
           <p>
-            AI engine matches your profile against live domestic and international opportunities, evaluating technical fit, skill gaps, and visa readiness.
+            Live postings matched against your profile, to show what employers are actually asking
+            for. This is reference material for your roadmap — you do not need a job match here to
+            start practising.
           </p>
         </div>
         <button
@@ -438,7 +440,20 @@ export default function JobMatchingView({ profile, showToast }) {
                       </div>
                       <ul style={{ paddingLeft: '1.2rem', fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
                         {deepDiveData[selectedMatch.job.id].interviewQuestions.map((q, idx) => (
-                          <li key={idx} style={{ marginBottom: '0.25rem' }}>{q}</li>
+                          <li key={idx} style={{ marginBottom: '0.45rem' }}>
+                            {q}
+                            {/* Opens a practice session on this exact question. It is an extra
+                                source of exercises, not part of the roadmap: answering it here
+                                completes no milestone. */}
+                            <button
+                              type="button"
+                              className="btn btn-secondary btn-sm"
+                              style={{ marginLeft: '0.5rem', padding: '0.15rem 0.45rem', fontSize: '0.7rem' }}
+                              onClick={() => onPracticeQuestion?.(selectedMatch.job, q)}
+                            >
+                              <Dumbbell size={11} /> Practice this question
+                            </button>
+                          </li>
                         ))}
                       </ul>
                       {deepDiveData[selectedMatch.job.id].interviewTips && (

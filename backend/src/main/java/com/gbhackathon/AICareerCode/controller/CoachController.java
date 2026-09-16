@@ -5,7 +5,9 @@ import com.gbhackathon.AICareerCode.dto.ChatMessageDto;
 import com.gbhackathon.AICareerCode.dto.ResumeAuditDto;
 import com.gbhackathon.AICareerCode.model.UserProfile;
 import com.gbhackathon.AICareerCode.service.AiCoachService;
+import com.gbhackathon.AICareerCode.service.LearningSnapshotService;
 import com.gbhackathon.AICareerCode.service.ProfileService;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -19,24 +21,42 @@ public class CoachController {
 
     private final ProfileService profileService;
     private final AiCoachService aiCoachService;
+    private final LearningSnapshotService learningSnapshotService;
 
-    public CoachController(ProfileService profileService, AiCoachService aiCoachService) {
+    public CoachController(ProfileService profileService,
+                           AiCoachService aiCoachService,
+                           LearningSnapshotService learningSnapshotService) {
         this.profileService = profileService;
         this.aiCoachService = aiCoachService;
+        this.learningSnapshotService = learningSnapshotService;
     }
 
+    /**
+     * The stored analysis for the current profile, generating and storing it on first request.
+     *
+     * <p>Both this and {@code /roadmap} read the same snapshot, so the milestone ids the Skills tab
+     * renders are the ids the progress endpoint will accept. Repeat calls do not regenerate: to get
+     * a different analysis a student has to actually change their profile.
+     */
     @GetMapping("/audit")
-    public ResponseEntity<ResumeAuditDto> getProfileAudit() {
+    public ResponseEntity<?> getProfileAudit() {
         UserProfile profile = profileService.getCurrentOrCreateProfile();
-        ResumeAuditDto audit = aiCoachService.auditProfile(profile);
-        return ResponseEntity.ok(audit);
+        try {
+            return ResponseEntity.ok(learningSnapshotService.getOrCreateAudit(profile));
+        } catch (LearningSnapshotService.StaleProfileRevisionException e) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));
+        }
     }
 
     @GetMapping("/roadmap")
-    public ResponseEntity<CareerRoadmapDto> getCareerRoadmap() {
+    public ResponseEntity<?> getCareerRoadmap() {
         UserProfile profile = profileService.getCurrentOrCreateProfile();
-        CareerRoadmapDto roadmap = aiCoachService.generateCareerRoadmap(profile);
-        return ResponseEntity.ok(roadmap);
+        try {
+            CareerRoadmapDto roadmap = learningSnapshotService.getOrCreateRoadmap(profile);
+            return ResponseEntity.ok(roadmap);
+        } catch (LearningSnapshotService.StaleProfileRevisionException e) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));
+        }
     }
 
     public static class ChatRequest {

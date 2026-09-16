@@ -103,6 +103,8 @@ public class CvParserService {
         public String phone;
         public String currentTitle;
         public String industry;
+        /** "Year 1" ... "Year 5+", or null. Anything else is discarded rather than stored. */
+        public String yearOfStudy;
         public Double yearsOfExperience;
         public List<String> skills;
         public String education;
@@ -138,6 +140,13 @@ public class CvParserService {
                    derive it strictly from their demonstrated field.
                 7. Write "industry" as a short label, for example "Semiconductor / IC Design",
                    "Mechanical Engineering", "Finance & Accounting", "Healthcare", "Software Engineering".
+                8. "yearOfStudy" is one of exactly "Year 1", "Year 2", "Year 3", "Year 4", "Year 5+",
+                   or null. Fill it ONLY when the CV states which year of study the person is
+                   currently in, in words ("2nd year student", "final-year undergraduate"). Do NOT
+                   derive it from an age, a graduation date, an enrolment date or years of
+                   experience, and do not fill it for someone who has already graduated. When in
+                   any doubt, use null - a wrong year sends the whole learning plan to the wrong
+                   stage, whereas null simply lets the student choose it themselves.
 
                 Return STRICT JSON with exactly this structure:
                 {
@@ -146,6 +155,7 @@ public class CvParserService {
                   "phone": "string or null",
                   "currentTitle": "string or null",
                   "industry": "string or null",
+                  "yearOfStudy": "string or null",
                   "yearsOfExperience": 0,
                   "skills": ["..."],
                   "education": "string or null",
@@ -171,6 +181,9 @@ public class CvParserService {
         profile.setPhone(blankToNull(extracted.phone));
         profile.setCurrentTitle(blankToNull(extracted.currentTitle));
         profile.setIndustry(blankToNull(extracted.industry));
+        // A model that answers "third year" or "2024" has broken the contract. That is not worth
+        // failing an entire CV upload over, so the value is dropped and the student picks the year.
+        profile.setYearOfStudy(ProfileService.normalizeYearOfStudyLenient(extracted.yearOfStudy));
         profile.setYearsOfExperience(extracted.yearsOfExperience != null ? extracted.yearsOfExperience : 0.0);
         profile.setSkills(cleanList(extracted.skills));
         profile.setEducation(blankToNull(extracted.education));
@@ -228,6 +241,11 @@ public class CvParserService {
 
         DomainRule domain = detectDomain(lower);
         profile.setIndustry(domain.label);
+
+        // The keyword parser does not attempt a year of study. Reading one off a graduation date or
+        // an enrolment year is guesswork, and a wrong year aims the whole roadmap at the wrong
+        // stage; leaving it null costs the student one dropdown.
+        profile.setYearOfStudy(null);
 
         double years = estimateYearsOfExperience(text, lower);
         profile.setYearsOfExperience(years);

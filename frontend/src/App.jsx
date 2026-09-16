@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import Navbar from './components/Navbar';
 import ProfileView from './components/ProfileView';
 import JobMatchingView from './components/JobMatchingView';
@@ -6,6 +6,7 @@ import ResumeAuditView from './components/ResumeAuditView';
 import AiCoachChatView from './components/AiCoachChatView';
 import {
   fetchCurrentProfile,
+  updateMilestoneProgress,
   DEFAULT_PROFILE,
   getApiBase,
   setCustomBackendUrl,
@@ -13,6 +14,11 @@ import {
   startKeepAlive,
   readCachedProfile,
 } from './api';
+import {
+  createJobPracticeRequest,
+  createRoadmapPracticeRequest,
+  profileRevisionOf,
+} from './practice';
 import { CheckCircle2, AlertTriangle, Loader2, RefreshCw } from 'lucide-react';
 import './App.css';
 
@@ -30,8 +36,10 @@ const STATUS = {
   OFFLINE: 'offline',
 };
 
+const EMPTY_CHAT = { sessionId: 'initial', messages: [], loading: false, context: null };
+
 export default function App() {
-  const [activeTab, setActiveTab] = useState('matching');
+  const [activeTab, setActiveTab] = useState('profile');
   // Show the last known profile immediately so the UI is populated while the server wakes.
   const [profile, setProfile] = useState(() => readCachedProfile() || DEFAULT_PROFILE);
   const [status, setStatus] = useState(STATUS.CONNECTING);
@@ -39,6 +47,17 @@ export default function App() {
   const [backendInput, setBackendInput] = useState('');
   const [toast, setToast] = useState(null);
   const connectingRef = useRef(false);
+
+  /**
+   * Chat and practice state live here rather than inside the chat view, because switching tabs
+   * unmounts the view. A conversation the user is midway through must survive a trip to the
+   * roadmap and back; only a page reload starts a new one.
+   */
+  const [chat, setChat] = useState(EMPTY_CHAT);
+  const [practiceRequest, setPracticeRequest] = useState(null);
+
+  const revision = profileRevisionOf(profile);
+  const lastRevisionRef = useRef(revision);
 
   const connect = useCallback(async () => {
     if (connectingRef.current) return;
@@ -75,6 +94,19 @@ export default function App() {
     return startKeepAlive();
   }, [status]);
 
+  /**
+   * A real profile edit changes the revision, which means the analysis, the roadmap and the
+   * advice the coach has been giving all describe someone the user no longer is. Reset the chat
+   * rather than letting it continue from a premise that has changed underneath it. Ticking a
+   * milestone does not move the revision, so it does not land here.
+   */
+  useEffect(() => {
+    if (lastRevisionRef.current === revision) return;
+    lastRevisionRef.current = revision;
+    setChat({ ...EMPTY_CHAT, sessionId: `rev-${revision}` });
+    setPracticeRequest(null);
+  }, [revision]);
+
   const showToast = (message) => {
     setToast(message);
     setTimeout(() => setToast(null), 3500);
@@ -86,6 +118,44 @@ export default function App() {
     showToast('Backend URL saved. Reconnecting...');
     connect();
   };
+
+  const startRoadmapPractice = (milestone, roadmapId) => {
+    setPracticeRequest(createRoadmapPracticeRequest(profile, milestone, roadmapId));
+    setActiveTab('chat');
+  };
+
+  const startJobPractice = (job, question) => {
+    setPracticeRequest(createJobPracticeRequest(profile, job, question));
+    setActiveTab('chat');
+  };
+
+  /**
+   * Pessimistic: the checkbox only moves once the server has accepted it. An optimistic tick that
+   * the server then rejects (stale roadmap, milestone gone) leaves the user believing they have
+   * recorded something they have not.
+   */
+  const toggleMilestone = useCallback(async (milestoneId, roadmapId, completed) => {
+    try {
+      const updated = await updateMilestoneProgress(milestoneId, roadmapId, completed);
+      setProfile(updated);
+      return { ok: true };
+    } catch (err) {
+      if (err.status === 409 || err.status === 404) {
+        // The roadmap this tab is showing is not the current one any more. Pull the real profile
+        // back so the roadmap reloads instead of accumulating more clicks that cannot be saved.
+        try {
+          const fresh = await fetchCurrentProfile();
+          setProfile(fresh);
+        } catch {
+          // Leave the stale profile in place; the message below still explains what happened.
+        }
+        showToast(err.message);
+        return { ok: false, reload: true, message: err.message };
+      }
+      showToast(err.message || 'Could not save your progress');
+      return { ok: false, reload: false, message: err.message };
+    }
+  }, []);
 
   const isConnected = status === STATUS.ONLINE;
 
@@ -139,18 +209,43 @@ export default function App() {
           <ProfileView
             profile={profile}
             setProfile={setProfile}
+            onGoToRoadmap={() => setActiveTab('audit')}
             onGoToMatching={() => setActiveTab('matching')}
             showToast={showToast}
           />
         )}
 
         {activeTab === 'matching' && (
-          <JobMatchingView profile={profile} showToast={showToast} isConnected={isConnected} />
+          <JobMatchingView
+            profile={profile}
+            showToast={showToast}
+            isConnected={isConnected}
+            onPracticeQuestion={startJobPractice}
+          />
         )}
 
-        {activeTab === 'audit' && <ResumeAuditView profile={profile} isConnected={isConnected} />}
+        {activeTab === 'audit' && (
+          <ResumeAuditView
+            profile={profile}
+            isConnected={isConnected}
+            onPracticeMilestone={startRoadmapPractice}
+            onToggleMilestone={toggleMilestone}
+          />
+        )}
 
-        {activeTab === 'chat' && <AiCoachChatView profile={profile} isConnected={isConnected} />}
+        {activeTab === 'chat' && (
+          <AiCoachChatView
+            profile={profile}
+            isConnected={isConnected}
+            chat={chat}
+            setChat={setChat}
+            practiceRequest={practiceRequest}
+            onPracticeConsumed={() => setPracticeRequest(null)}
+            onBackToRoadmap={() => setActiveTab('audit')}
+            onToggleMilestone={toggleMilestone}
+            profileRevision={revision}
+          />
+        )}
       </main>
 
       {toast && (

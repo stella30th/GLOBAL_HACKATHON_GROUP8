@@ -1,32 +1,85 @@
-# AI Career Coach & Global Opportunity Navigator 🚀
+# AI Skills Readiness Coach for Students 🎓
 
-> Nền tảng định hướng nghề nghiệp và tìm việc toàn cầu, dùng **Google Gemini**, **Spring Boot** và **React (Vite)**.
-> Hoạt động cho **mọi ngành nghề** — không chỉ IT.
+> **Identify your skill gaps. Build your roadmap. Practice for the AI era.**
+>
+> Nền tảng giúp sinh viên nhìn ra khoảng trống kỹ năng, dựng lộ trình học 12 tháng và luyện tập
+> theo từng mốc — dùng **Google Gemini**, **Spring Boot** và **React (Vite)**.
+> Demo tập trung vào Software Engineering nhưng đọc được hồ sơ **mọi ngành**.
 
 ---
 
-## 🌟 Tính năng
+## 🌟 Ba bước chính
 
-1. **Phân tích CV bằng AI (đa ngành)** — Gemini đọc trực tiếp nội dung CV để nhận diện đúng lĩnh vực
-   (thiết kế vi mạch, cơ khí, tài chính, y tế, marketing, xây dựng…), trích xuất kỹ năng và công cụ
-   thật sự có trong CV. Nếu AI không khả dụng, hệ thống dùng bộ từ điển đa ngành làm dự phòng và
-   **để trống** những gì không tìm thấy thay vì suy đoán.
-2. **Ghép việc làm theo đúng ngành** — Lấy tin tuyển dụng trực tiếp từ **6 nguồn**: Remotive (30 nhóm
-   ngành), Jobicy, Remote OK, Himalayas, The Muse (y tế, tài chính, pháp lý, kỹ thuật, bảo trì…) và
-   Arbeitnow (châu Âu, có bảo lãnh visa). Điểm phù hợp được tính từ mức độ trùng ngành, kỹ năng, kinh nghiệm và
-   khả năng làm việc hợp pháp.
-3. **Phân tích chuyên sâu từng vị trí** — AI đối chiếu CV với từng tin tuyển dụng cụ thể: điểm mạnh,
-   khoảng trống, khả năng visa và câu hỏi phỏng vấn dự kiến.
-4. **Đánh giá CV & lộ trình 12 tháng** — Chấm điểm ATS, viết lại gạch đầu dòng theo công thức STAR và
-   dựng lộ trình mốc 3/6/12 tháng bám theo đúng dự án và công cụ trong CV.
-5. **Chat với AI Career Coach** — Trả lời trực tiếp câu hỏi dựa trên hồ sơ thật của ứng viên.
-   Giao diện hoàn toàn bằng tiếng Anh; AI trả lời tiếng Anh, và tự chuyển sang ngôn ngữ khác nếu
-   người dùng hỏi bằng ngôn ngữ đó.
-6. **Giao diện responsive** cho điện thoại, máy tính bảng và desktop.
+### 1. Identify — nhìn ra mình đang ở đâu
+Nhập hồ sơ thủ công hoặc tải CV lên. Gemini đọc CV để nhận diện đúng lĩnh vực (vi mạch, cơ khí,
+tài chính, y tế, marketing…) và trích xuất kỹ năng **thật sự có trong CV**; khi AI không khả dụng,
+bộ từ điển đa ngành làm dự phòng và **để trống** thay vì suy đoán.
+
+Phần đánh giá chỉ ra điểm mạnh, khoảng trống và **chỗ thiếu bằng chứng**. Khi hồ sơ im lặng về một
+kỹ năng, hệ thống ghi `Not enough evidence in your profile` chứ không kết luận người dùng không biết
+kỹ năng đó.
+
+### 2. Develop — lộ trình 3 / 6 / 12 tháng
+Lộ trình bám theo **năm học** (`Year 1`…`Year 5+`, hoặc để trống) và hồ sơ thực tế: năm 1–2 ưu tiên
+nền tảng và dự án học phần, năm 3 hướng portfolio/thực tập, năm 4–5+ hoàn thiện portfolio và chuẩn
+bị internship/junior. Mỗi lộ trình luôn có ít nhất một mốc **AI_FLUENCY** với hành động cụ thể và
+sản phẩm đầu ra kiểm tra được — không phải "học AI" chung chung. Nếu model quên, backend tự bổ sung
+mốc dự phòng trước khi lưu.
+
+### 3. Practice — luyện tập và tự đánh dấu tiến độ
+Mỗi mốc có nút **Practice this skill**: coach đặt **một** bài tập, chờ trả lời, rồi chấm 0–2 cho mỗi
+tiêu chí (đúng/phù hợp · lập luận · bằng chứng và cách kiểm chứng) và góp ý. Đây là **phản hồi luyện
+tập, không phải chứng chỉ**. Câu hỏi phỏng vấn trong phần deep-dive cũng có nút
+**Practice this question** làm nguồn bài tập bổ sung.
+
+### Nguồn tham khảo thị trường
+Tin tuyển dụng lấy từ **6 nguồn** (Remotive, Jobicy, Remote OK, Himalayas, The Muse, Arbeitnow) để
+cho thấy nhà tuyển dụng đang hỏi gì. Đây là tài liệu tham khảo — **không cần** có job match mới luyện
+tập được.
 
 Mọi kết quả AI đều hiển thị rõ **nguồn tạo ra nó**: nhãn tên model khi Gemini trả lời, hoặc nhãn
 "AI tạm không khả dụng" khi hệ thống chạy ở chế độ dự phòng — không bao giờ ngụy trang nội dung
 dự phòng thành câu trả lời của AI.
+
+---
+
+## 📌 Giới hạn cần nói rõ
+
+- **Điểm ATS là điểm chất lượng CV/hồ sơ**, không phải điểm năng lực và không phải "AI readiness
+  score". Giao diện ghi rõ điều này ngay cạnh con số.
+- **Tiến độ do người dùng tự xác nhận.** Tick/untick là lựa chọn của sinh viên; AI không tự đánh dấu
+  hoàn thành, và điểm 0–6 trong phần luyện tập không bao giờ được dùng để tự tick.
+- Luyện tập từ câu hỏi tuyển dụng **không** hoàn thành mốc nào trong lộ trình.
+- Không có xác minh năm học, không có gate sinh viên năm cuối: mọi năm học hoặc bỏ trống đều dùng được.
+
+---
+
+## 🔄 Lưu trữ, reset và vòng đời dữ liệu
+
+Bài đánh giá cùng lộ trình được lưu thành **snapshot** trong hàng hồ sơ, kèm `roadmapId` và id từng
+mốc do **server** cấp (UUID). Nhờ vậy id không đổi qua reload, qua xoá cache và qua restart backend —
+tiến độ đã tick vẫn trỏ đúng chỗ.
+
+| Thao tác | Snapshot / tiến độ | Chat |
+|---|---|---|
+| Sửa hồ sơ (có thay đổi thật) | Reset, sinh lại lộ trình mới | Reset |
+| Bấm Save mà không đổi gì | **Giữ nguyên** (`updatedAt` không đổi) | Giữ |
+| Tải CV lên / đổi sample | Reset, bỏ CV và dữ liệu người trước | Reset |
+| Tick / untick mốc | Chỉ đổi danh sách đã hoàn thành | Giữ |
+| Đổi tab | Giữ | Giữ |
+| Reload trang | Giữ (đọc lại từ DB) | Bắt đầu chat mới |
+| Restart backend | Giữ | Không lưu chat ở server |
+
+Nút **Reload analysis** chỉ tải lại snapshot, **không** sinh lại phân tích. Muốn có phân tích mới,
+hãy sửa hồ sơ thật sự.
+
+### ⚠️ Thay đổi schema
+
+Bản này **thêm cột** vào `user_profiles`: `year_of_study`, `learning_snapshot_json`,
+`learning_snapshot_version`, `learning_snapshot_profile_key`, `completed_milestones`.
+Cấu hình hiện tại dùng `spring.jpa.hibernate.ddl-auto: update` nên Hibernate tự thêm cột khi khởi
+động. Môi trường nào không dùng chế độ đó cần migration tương ứng. Hàng dữ liệu cũ có cột null đọc
+như "chưa có snapshot / chưa có tiến độ" — **không cần xoá database để nâng cấp**.
 
 ---
 
@@ -97,8 +150,9 @@ echo "VITE_API_BASE=http://localhost:8099/api" > frontend/.env.local
 - `healthCheckPath: /api/health` giúp Render đánh dấu service sẵn sàng ngay khi tầng web trả lời, không
   phải chờ database.
 - Việc đồng bộ tin tuyển dụng lúc khởi động chạy **bất đồng bộ**, nên không làm chậm thời gian khởi động.
-- Kết quả đánh giá CV và lộ trình được **cache theo phiên bản hồ sơ**, vừa tiết kiệm quota AI vừa giúp
-  chuyển tab không phải chờ gọi lại model.
+- Kết quả đánh giá CV và lộ trình được **lưu snapshot theo phiên bản hồ sơ** trong database (cache RAM
+  chỉ là lớp tối ưu phía trước), vừa tiết kiệm quota AI vừa giúp chuyển tab và restart không làm mất
+  id mốc lộ trình.
 
 ---
 
@@ -109,12 +163,31 @@ echo "VITE_API_BASE=http://localhost:8099/api" > frontend/.env.local
 | `GET` | `/api/health` | Kiểm tra sống (không chạm database) |
 | `GET` | `/api/coach/ai-status?probe=true` | Chẩn đoán kết nối Gemini |
 | `POST` | `/api/profiles/upload-cv` | Tải CV lên và phân tích |
-| `GET` | `/api/profiles/current` | Hồ sơ hiện tại |
+| `GET` | `/api/profiles/current` | Hồ sơ hiện tại (kèm `completedMilestones`, `roadmapId` — chỉ đọc) |
+| `POST` | `/api/profiles/reset-sample/{type}` | Nạp hồ sơ mẫu: `student-year-2` hoặc `student-year-4` |
+| `PATCH` | `/api/profiles/current/milestones/{milestoneId}` | Tự đánh dấu một mốc (`{ "roadmapId": "...", "completed": true }`). Không đổi `updatedAt`, không gọi AI. 409 nếu lộ trình đã cũ, 404 nếu mốc không thuộc lộ trình hiện tại |
 | `GET` | `/api/jobs` | Danh sách việc làm (lọc theo từ khoá, khu vực, hình thức, visa) |
 | `GET` | `/api/jobs/source-status` | Kiểm tra từng nguồn việc làm có bị chặn không |
 | `POST` | `/api/jobs/sync-external` | Đồng bộ tin tuyển dụng từ 6 nguồn |
 | `GET` | `/api/matches` | Điểm phù hợp cho hồ sơ hiện tại |
 | `GET` | `/api/matches/{id}/ai-deep-dive` | Phân tích chuyên sâu một vị trí |
-| `GET` | `/api/coach/audit` | Đánh giá CV và lộ trình |
-| `GET` | `/api/coach/roadmap` | Lộ trình 12 tháng |
-| `POST` | `/api/coach/chat` | Chat với AI Career Coach |
+| `GET` | `/api/coach/audit` | Đánh giá hồ sơ + lộ trình (đọc snapshot; sinh mới ở lần gọi đầu) |
+| `GET` | `/api/coach/roadmap` | Lộ trình 12 tháng — **cùng snapshot, cùng id** với `/audit` |
+| `POST` | `/api/coach/chat` | Chat và luyện tập với coach |
+
+---
+
+## 🧪 Kiểm thử
+
+```bash
+cd backend && ./mvnw test
+```
+
+24 test chạy trên H2 in-memory, không gọi Gemini thật (không cấu hình API key trong test → đi đường
+offline, kết quả tất định). Phạm vi: vòng đời `yearOfStudy`, no-op save vs. reset, snapshot tái dùng
+sau khi service khởi tạo lại, `/audit` và `/roadmap` trùng id, tick/untick idempotent không đổi
+`updatedAt` và không gọi model, chặn ghi đè khi hồ sơ đã đổi, và lộ trình offline luôn có AI_FLUENCY.
+
+```bash
+cd frontend && npm run build && npm run lint
+```

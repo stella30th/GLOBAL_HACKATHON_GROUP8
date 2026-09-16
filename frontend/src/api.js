@@ -1,17 +1,31 @@
+/**
+ * What the app shows before it has heard from the server.
+ *
+ * Empty on purpose. The previous default described a backend engineer with three years of
+ * experience and senior-role ambitions, and anyone who did not immediately overwrite it got an
+ * audit and a roadmap written for a person who did not exist.
+ */
 export const DEFAULT_PROFILE = {
   id: null,
   fullName: "",
+  email: "",
   currentTitle: "",
   industry: "",
+  yearOfStudy: null,
   yearsOfExperience: 0,
   bio: "",
   skills: [],
   targetRoles: [],
   targetLocations: [],
-  willingToRelocate: true,
+  willingToRelocate: false,
   targetWorkType: "ANY",
   rawCvText: "",
+  completedMilestones: [],
+  roadmapId: null,
 };
+
+/** Must match ProfileService.YEAR_OF_STUDY_VALUES on the backend. */
+export const YEAR_OF_STUDY_OPTIONS = ['Year 1', 'Year 2', 'Year 3', 'Year 4', 'Year 5+'];
 
 /**
  * Render's free tier stops the backend instance after 15 minutes of inactivity, and the cold start
@@ -205,7 +219,38 @@ export async function uploadCvFile(file) {
 
 export async function resetSampleProfile(type) {
   const res = await fetchWithTimeout(`${getApiBase()}/profiles/reset-sample/${type}`, { method: 'POST' });
-  if (!res.ok) throw new Error('Could not switch to the sample profile');
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Could not switch to the sample profile');
+  }
+  const profile = await res.json();
+  cacheProfile(profile);
+  return profile;
+}
+
+/**
+ * Records one self-reported milestone tick.
+ *
+ * Its own endpoint rather than a profile save: saving the profile moves the revision, which
+ * discards the roadmap the milestone belongs to. The server also validates the milestone against
+ * the current roadmap, so a stale tab gets 409/404 instead of writing progress into nothing; the
+ * status is attached to the error so the caller can react rather than just showing a message.
+ */
+export async function updateMilestoneProgress(milestoneId, roadmapId, completed) {
+  const res = await fetchWithTimeout(
+    `${getApiBase()}/profiles/current/milestones/${encodeURIComponent(milestoneId)}`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ roadmapId, completed }),
+    },
+  );
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    const error = new Error(err.error || 'Could not save your progress');
+    error.status = res.status;
+    throw error;
+  }
   const profile = await res.json();
   cacheProfile(profile);
   return profile;
@@ -249,15 +294,29 @@ export async function syncExternalJobs() {
 // AI coach
 // ---------------------------------------------------------------------------
 
+/**
+ * The stored analysis for the current profile. The server generates it once per profile revision
+ * and serves the same snapshot afterwards, so calling this again is a reload, not a re-analysis.
+ */
 export async function fetchProfileAudit() {
   const res = await fetchWithTimeout(`${getApiBase()}/coach/audit`, {}, AI_TIMEOUT_MS);
-  if (!res.ok) throw new Error('Could not analyse your profile');
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    const error = new Error(err.error || 'Could not analyse your profile');
+    error.status = res.status;
+    throw error;
+  }
   return res.json();
 }
 
 export async function fetchRoadmap() {
   const res = await fetchWithTimeout(`${getApiBase()}/coach/roadmap`, {}, AI_TIMEOUT_MS);
-  if (!res.ok) throw new Error('Could not load your career roadmap');
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    const error = new Error(err.error || 'Could not load your roadmap');
+    error.status = res.status;
+    throw error;
+  }
   return res.json();
 }
 

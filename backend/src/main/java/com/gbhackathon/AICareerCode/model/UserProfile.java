@@ -22,6 +22,13 @@ public class UserProfile {
     private String industry; // e.g. "Semiconductor / IC Design", "Finance & Accounting"
     private Double yearsOfExperience;
 
+    /**
+     * Canonical values only: "Year 1" ... "Year 5+", or null when it is not known.
+     * Nullable on purpose - the product serves students of every year and people who are not
+     * students at all, so an unknown year stays unknown rather than being guessed.
+     */
+    private String yearOfStudy;
+
     @Column(columnDefinition = "TEXT")
     private String bio;
 
@@ -45,19 +52,48 @@ public class UserProfile {
     @Column(columnDefinition = "TEXT")
     private String rawCvText;
 
+    // ------------------------------------------------------------------
+    // Learning snapshot and self-reported progress.
+    //
+    // The audit and its embedded roadmap are stored here so milestone ids survive a reload, a
+    // cache eviction and a backend restart. Without a stored snapshot the roadmap was regenerated
+    // whenever the in-memory cache lost it, and every previously ticked milestone pointed at an
+    // id that no longer existed.
+    // ------------------------------------------------------------------
+
+    /** Serialised {@code ResumeAuditDto}, roadmap included. Never exposed through ProfileDto. */
+    @Column(columnDefinition = "TEXT")
+    private String learningSnapshotJson;
+
+    /** Serialisation / prompt contract version, so an incompatible old snapshot can be discarded. */
+    private Integer learningSnapshotVersion;
+
+    /** The profile revision ({@code id@updatedAt}) the snapshot was generated from. */
+    private String learningSnapshotProfileKey;
+
+    /** JSON array of milestone ids the user self-reported as done. Null reads as an empty list. */
+    @Column(columnDefinition = "TEXT")
+    private String completedMilestones;
+
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
     @PrePersist
     public void prePersist() {
-        this.createdAt = LocalDateTime.now();
-        this.updatedAt = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now();
+        if (this.createdAt == null) {
+            this.createdAt = now;
+        }
+        if (this.updatedAt == null) {
+            this.updatedAt = now;
+        }
     }
 
-    @PreUpdate
-    public void preUpdate() {
-        this.updatedAt = LocalDateTime.now();
-    }
+    // There is deliberately no @PreUpdate hook. updatedAt is the profile revision that invalidates
+    // the learning snapshot, the AI caches and the chat session, so it must change only when the
+    // profile content really changes. A lifecycle hook would also bump it when the only thing
+    // written was a ticked checkbox, silently discarding the roadmap that tick belonged to.
+    // ProfileService sets updatedAt explicitly on the paths that are real content edits.
 
     public List<String> getSkillList() {
         if (skills == null || skills.isBlank()) {
@@ -216,6 +252,46 @@ public class UserProfile {
 
     public void setIndustry(String industry) {
         this.industry = industry;
+    }
+
+    public String getYearOfStudy() {
+        return yearOfStudy;
+    }
+
+    public void setYearOfStudy(String yearOfStudy) {
+        this.yearOfStudy = yearOfStudy;
+    }
+
+    public String getLearningSnapshotJson() {
+        return learningSnapshotJson;
+    }
+
+    public void setLearningSnapshotJson(String learningSnapshotJson) {
+        this.learningSnapshotJson = learningSnapshotJson;
+    }
+
+    public Integer getLearningSnapshotVersion() {
+        return learningSnapshotVersion;
+    }
+
+    public void setLearningSnapshotVersion(Integer learningSnapshotVersion) {
+        this.learningSnapshotVersion = learningSnapshotVersion;
+    }
+
+    public String getLearningSnapshotProfileKey() {
+        return learningSnapshotProfileKey;
+    }
+
+    public void setLearningSnapshotProfileKey(String learningSnapshotProfileKey) {
+        this.learningSnapshotProfileKey = learningSnapshotProfileKey;
+    }
+
+    public String getCompletedMilestones() {
+        return completedMilestones;
+    }
+
+    public void setCompletedMilestones(String completedMilestones) {
+        this.completedMilestones = completedMilestones;
     }
 
     public String getRawCvText() {

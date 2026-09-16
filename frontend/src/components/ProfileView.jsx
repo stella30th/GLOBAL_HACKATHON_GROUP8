@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { 
-  UploadCloud, FileText, CheckCircle2, User, Globe, 
+  UploadCloud, FileText, User, Globe,
   MapPin, Plus, X, Save, ArrowRight, Loader2 
 } from 'lucide-react';
-import { saveProfile, uploadCvFile, resetSampleProfile, DEFAULT_PROFILE } from '../api';
+import { saveProfile, uploadCvFile, resetSampleProfile, DEFAULT_PROFILE, YEAR_OF_STUDY_OPTIONS } from '../api';
 
-export default function ProfileView({ profile, setProfile, onGoToMatching, showToast }) {
+export default function ProfileView({ profile, setProfile, onGoToRoadmap, onGoToMatching, showToast }) {
   const [loading, setLoading] = useState(false);
   const [newSkill, setNewSkill] = useState('');
   const [newRole, setNewRole] = useState('');
@@ -19,7 +19,7 @@ export default function ProfileView({ profile, setProfile, onGoToMatching, showT
     try {
       const updated = await uploadCvFile(file);
       setProfile(updated);
-      showToast('Resume parsed and profile updated successfully! 🎉');
+      showToast('CV parsed. Your roadmap and progress were reset for the new profile.');
     } catch (err) {
       alert(err.message || 'Error parsing resume file');
     } finally {
@@ -33,7 +33,12 @@ export default function ProfileView({ profile, setProfile, onGoToMatching, showT
     try {
       const updated = await saveProfile(profile);
       setProfile(updated);
-      showToast('Profile saved successfully! 💾');
+      // The server treats a save that changes nothing as a no-op, so the message has to match:
+      // telling someone their roadmap was reset when it was not is its own kind of wrong.
+      const wasReset = updated.updatedAt !== profile.updatedAt;
+      showToast(wasReset
+        ? 'Profile saved. Your roadmap and progress were reset for the new details.'
+        : 'Profile saved — nothing changed, so your roadmap and progress were kept.');
     } catch (err) {
       alert(err.message || 'Error saving profile');
     } finally {
@@ -46,7 +51,7 @@ export default function ProfileView({ profile, setProfile, onGoToMatching, showT
     try {
       const updated = await resetSampleProfile(type);
       setProfile(updated);
-      showToast(`Switched to sample profile: ${type}`);
+      showToast(`Loaded the ${updated.yearOfStudy || 'sample'} student profile. Roadmap and progress were reset.`);
     } catch (err) {
       alert(err.message);
     } finally {
@@ -122,31 +127,38 @@ export default function ProfileView({ profile, setProfile, onGoToMatching, showT
     <div>
       <div className="page-header">
         <div className="page-header-text">
-          <h1>Career Profile & Resume Upload</h1>
+          <h1>My profile</h1>
           <p>
-            Personalize your professional identity, core tech stack, and set career goals domestically or overseas.
+            Tell us what you are studying and what you have built. Everything else in the app —
+            your skill gaps, your roadmap and your practice — is generated from this.
           </p>
         </div>
         <div style={{ display: 'flex', gap: '0.65rem', flexWrap: 'wrap' }}>
           <button
             className="btn btn-secondary btn-sm"
-            onClick={() => handleLoadSample('senior-backend')}
+            onClick={() => handleLoadSample('student-year-2')}
             disabled={loading}
           >
-            👨‍💻 Sample: Senior Backend (Relocation)
+            🎓 Sample: Year 2 student
           </button>
           <button
             className="btn btn-secondary btn-sm"
-            onClick={() => handleLoadSample('frontend-react')}
+            onClick={() => handleLoadSample('student-year-4')}
             disabled={loading}
           >
-            🎨 Sample: Frontend React (Remote US)
+            🎓 Sample: Year 4 student
           </button>
           <button
             className="btn btn-primary btn-sm"
+            onClick={onGoToRoadmap}
+          >
+            See my skills & roadmap <ArrowRight size={14} />
+          </button>
+          <button
+            className="btn btn-secondary btn-sm"
             onClick={onGoToMatching}
           >
-            Find Matching Jobs <ArrowRight size={14} />
+            Browse market opportunities
           </button>
         </div>
       </div>
@@ -158,7 +170,7 @@ export default function ProfileView({ profile, setProfile, onGoToMatching, showT
             <div className="card-title-row">
               <div className="card-title">
                 <UploadCloud size={20} color="#818cf8" />
-                <span>AI Resume Extractor</span>
+                <span>Upload your CV</span>
               </div>
             </div>
 
@@ -175,10 +187,10 @@ export default function ProfileView({ profile, setProfile, onGoToMatching, showT
               </div>
               <div>
                 <strong style={{ color: '#ffffff', display: 'block', marginBottom: '0.2rem' }}>
-                  {loading ? 'Extracting resume details...' : 'Drag & Drop your Resume or Click to Browse'}
+                  {loading ? 'Reading your CV…' : 'Drag & drop your CV, or click to browse'}
                 </strong>
                 <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                  Supports PDF and TXT. AI automatically extracts technical skills, roles, and experience.
+                  Supports PDF and TXT. The AI extracts only what the document actually says — check it afterwards and correct anything it got wrong. Uploading replaces your whole profile.
                 </span>
               </div>
             </label>
@@ -260,13 +272,20 @@ export default function ProfileView({ profile, setProfile, onGoToMatching, showT
           <div className="card-title-row">
             <div className="card-title">
               <User size={20} color="#818cf8" />
-              <span>Personal & Professional Profile</span>
+              <span>About you</span>
             </div>
             <button type="submit" className="btn btn-primary" disabled={loading}>
               {loading ? <Loader2 className="animate-spin" size={16} /> : <Save size={16} />}
-              Save Profile
+              Save profile
             </button>
           </div>
+
+          {/* Said once, here, rather than in a modal on every save. */}
+          <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '1rem', lineHeight: '1.5' }}>
+            Changing your profile regenerates your analysis and roadmap, which clears the milestones
+            you have ticked off — the advice was written for the older profile. Saving without
+            changing anything keeps them.
+          </p>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
             <div className="form-group">
@@ -293,25 +312,54 @@ export default function ProfileView({ profile, setProfile, onGoToMatching, showT
 
           <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: '1rem' }}>
             <div className="form-group">
-              <label className="form-label">Current Title / Role</label>
+              <label className="form-label">Current title or study specialisation</label>
               <input
                 type="text"
                 className="form-control"
                 value={profile.currentTitle || ''}
                 onChange={(e) => setProfile({ ...profile, currentTitle: e.target.value })}
-                placeholder="e.g., Senior Backend Engineer"
+                placeholder="e.g., Software Engineering Student"
                 required
               />
             </div>
             <div className="form-group">
-              <label className="form-label">Years of Experience</label>
+              <label className="form-label">Field / industry</label>
+              <input
+                type="text"
+                className="form-control"
+                value={profile.industry || ''}
+                onChange={(e) => setProfile({ ...profile, industry: e.target.value })}
+                placeholder="e.g., Software Engineering"
+              />
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+            <div className="form-group">
+              {/* Optional, and it stays optional: the app has no final-year gate, and someone who
+                  is not a student at all should not be forced to claim a year. */}
+              <label className="form-label">Year of study (optional)</label>
+              <select
+                className="form-control"
+                value={profile.yearOfStudy || ''}
+                onChange={(e) => setProfile({ ...profile, yearOfStudy: e.target.value })}
+              >
+                <option value="">Not specified</option>
+                {YEAR_OF_STUDY_OPTIONS.map((year) => (
+                  <option key={year} value={year}>{year}</option>
+                ))}
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Years of professional experience</label>
               <input
                 type="number"
                 step="0.5"
+                min="0"
                 className="form-control"
-                value={profile.yearsOfExperience || ''}
+                value={profile.yearsOfExperience ?? ''}
                 onChange={(e) => setProfile({ ...profile, yearsOfExperience: parseFloat(e.target.value) || 0 })}
-                required
+                placeholder="0 if you have not worked yet"
               />
             </div>
           </div>
@@ -341,7 +389,7 @@ export default function ProfileView({ profile, setProfile, onGoToMatching, showT
 
           {/* Skills Management */}
           <div className="form-group">
-            <label className="form-label">Core Technical Skills</label>
+            <label className="form-label">Skills and tools you have used</label>
             <div style={{ display: 'flex', gap: '0.5rem' }}>
               <input
                 type="text"
@@ -369,7 +417,7 @@ export default function ProfileView({ profile, setProfile, onGoToMatching, showT
 
           {/* Target Roles */}
           <div className="form-group">
-            <label className="form-label">Target Next Roles</label>
+            <label className="form-label">Roles you are aiming for</label>
             <div style={{ display: 'flex', gap: '0.5rem' }}>
               <input
                 type="text"
@@ -397,7 +445,7 @@ export default function ProfileView({ profile, setProfile, onGoToMatching, showT
 
           {/* Bio */}
           <div className="form-group">
-            <label className="form-label">Professional Summary & Bio</label>
+            <label className="form-label">Short summary: what you have studied and built</label>
             <textarea
               className="form-control"
               value={profile.bio || ''}

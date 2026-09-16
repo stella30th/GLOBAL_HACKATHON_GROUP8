@@ -3,7 +3,10 @@ package com.gbhackathon.AICareerCode.controller;
 import com.gbhackathon.AICareerCode.dto.ProfileDto;
 import com.gbhackathon.AICareerCode.model.UserProfile;
 import com.gbhackathon.AICareerCode.service.CvParserService;
+import com.gbhackathon.AICareerCode.service.LearningSnapshotService;
 import com.gbhackathon.AICareerCode.service.ProfileService;
+import com.gbhackathon.AICareerCode.service.ProfileValidationException;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -19,10 +22,14 @@ public class ProfileController {
 
     private final ProfileService profileService;
     private final CvParserService cvParserService;
+    private final LearningSnapshotService learningSnapshotService;
 
-    public ProfileController(ProfileService profileService, CvParserService cvParserService) {
+    public ProfileController(ProfileService profileService,
+                             CvParserService cvParserService,
+                             LearningSnapshotService learningSnapshotService) {
         this.profileService = profileService;
         this.cvParserService = cvParserService;
+        this.learningSnapshotService = learningSnapshotService;
     }
 
     @GetMapping("/current")
@@ -32,9 +39,13 @@ public class ProfileController {
     }
 
     @PostMapping
-    public ResponseEntity<ProfileDto> saveProfile(@RequestBody ProfileDto dto) {
-        UserProfile saved = profileService.saveOrUpdateProfile(dto);
-        return ResponseEntity.ok(profileService.toDto(saved));
+    public ResponseEntity<?> saveProfile(@RequestBody ProfileDto dto) {
+        try {
+            UserProfile saved = profileService.saveOrUpdateProfile(dto);
+            return ResponseEntity.ok(profileService.toDto(saved));
+        } catch (ProfileValidationException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
     }
 
     @PostMapping("/upload-cv")
@@ -58,53 +69,119 @@ public class ProfileController {
         }
     }
 
-    @PostMapping("/reset-sample/{type}")
-    public ResponseEntity<ProfileDto> setSampleProfile(@PathVariable("type") String type) {
-        ProfileDto p = new ProfileDto();
-        if ("senior-backend".equalsIgnoreCase(type)) {
-            p.setFullName("Alex Tuan Le");
-            p.setEmail("alex.tuan.dev@gmail.com");
-            p.setPhone("+84 908 112 233");
-            p.setCurrentTitle("Senior Backend Engineer (Distributed Systems)");
-            p.setYearsOfExperience(5.0);
-            p.setEducation("B.S. in Software Engineering - National University");
-            p.setLanguages("English (Professional Working - IELTS 7.5), Vietnamese (Native)");
-            p.setSkills(List.of("Java", "Spring Boot", "MySQL", "Docker", "Kubernetes", "Redis", "Kafka", "Microservices", "AWS", "System Design", "Git"));
-            p.setTargetRoles(List.of("Senior Backend Engineer", "Lead Platform Engineer", "Cloud Architect"));
-            p.setTargetLocations(List.of("Singapore", "Germany / EU", "Japan", "Remote Worldwide"));
-            p.setWillingToRelocate(true);
-            p.setTargetWorkType("ANY");
-            p.setBio("5 years of specialized experience in high-throughput backend architecture and event-driven microservices. Seeking relocation opportunities in Singapore or Europe with visa sponsorship.");
-        } else if ("frontend-react".equalsIgnoreCase(type)) {
-            p.setFullName("Brian Nam Tran");
-            p.setEmail("brian.nam.ui@gmail.com");
-            p.setPhone("+84 938 776 554");
-            p.setCurrentTitle("Frontend React / Next.js Specialist");
-            p.setYearsOfExperience(3.0);
-            p.setEducation("B.S. in Computer Science");
-            p.setLanguages("English (Fluent), Vietnamese (Native)");
-            p.setSkills(List.of("React", "TypeScript", "JavaScript", "Next.js", "Tailwind CSS", "REST API", "Git", "Node.js"));
-            p.setTargetRoles(List.of("Senior Frontend Engineer", "UI/UX Tech Lead"));
-            p.setTargetLocations(List.of("Vietnam", "Remote Worldwide (US/EU)", "Singapore"));
-            p.setWillingToRelocate(false);
-            p.setTargetWorkType("REMOTE");
-            p.setBio("3 years building responsive, high-performance web applications with React & TypeScript. Seeking high-impact 100% remote global software positions with USD compensation.");
-        } else {
-            p.setFullName("David Nguyen");
-            p.setEmail("david.nguyen.tech@example.com");
-            p.setPhone("+84 912 345 678");
-            p.setCurrentTitle("Full Stack Developer");
-            p.setYearsOfExperience(2.5);
-            p.setEducation("B.S. in Information Technology");
-            p.setLanguages("English (Professional Working), Vietnamese (Native)");
-            p.setSkills(List.of("Java", "Spring Boot", "React", "MySQL", "Docker", "REST API", "Git"));
-            p.setTargetRoles(List.of("Full Stack Engineer", "Backend Developer"));
-            p.setTargetLocations(List.of("Vietnam", "Remote Worldwide", "Singapore"));
-            p.setWillingToRelocate(true);
-            p.setTargetWorkType("ANY");
-            p.setBio("Enthusiastic full-stack engineer experienced in Java Spring Boot backend services and modern React user interfaces.");
+    /**
+     * Records that the student has, by their own judgement, finished a milestone.
+     *
+     * <p>Deliberately not part of {@code POST /api/profiles}: that endpoint moves the profile
+     * revision, which throws away the snapshot the milestone belongs to - a checkbox would have
+     * deleted the roadmap it was ticking. This one validates the milestone against the current
+     * roadmap, writes only the progress list, and leaves {@code updatedAt} alone. No AI is called.
+     */
+    @PatchMapping("/current/milestones/{milestoneId}")
+    public ResponseEntity<?> updateMilestoneProgress(@PathVariable("milestoneId") String milestoneId,
+                                                     @RequestBody MilestoneProgressRequest request) {
+        if (request == null || request.getRoadmapId() == null || request.getRoadmapId().isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "roadmapId is required."));
         }
-        UserProfile saved = profileService.saveOrUpdateProfile(p);
+        if (request.getCompleted() == null) {
+            return ResponseEntity.badRequest().body(Map.of("error", "completed must be true or false."));
+        }
+        if (milestoneId == null || milestoneId.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "milestoneId is required."));
+        }
+
+        UserProfile current = profileService.getCurrentOrCreateProfile();
+        try {
+            UserProfile updated = learningSnapshotService.updateMilestoneProgress(
+                    current.getId(), request.getRoadmapId(), milestoneId, request.getCompleted());
+            return ResponseEntity.ok(profileService.toDto(updated));
+        } catch (LearningSnapshotService.StaleRoadmapException e) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));
+        } catch (LearningSnapshotService.MilestoneNotFoundException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    public static class MilestoneProgressRequest {
+        private String roadmapId;
+        /** Boxed so a missing field is distinguishable from an explicit false. */
+        private Boolean completed;
+
+        public String getRoadmapId() {
+            return roadmapId;
+        }
+
+        public void setRoadmapId(String roadmapId) {
+            this.roadmapId = roadmapId;
+        }
+
+        public Boolean getCompleted() {
+            return completed;
+        }
+
+        public void setCompleted(Boolean completed) {
+            this.completed = completed;
+        }
+    }
+
+    /**
+     * Demo profiles.
+     *
+     * <p>Two students rather than the three working professionals that used to live here: a
+     * mid-career backend engineer produced a roadmap about senior roles and relocation, which is
+     * not the product. Both samples are fictional, use example.com addresses, and record zero
+     * professional experience - university projects are coursework, not employment.
+     */
+    @PostMapping("/reset-sample/{type}")
+    public ResponseEntity<?> setSampleProfile(@PathVariable("type") String type) {
+        ProfileDto p = new ProfileDto();
+        if ("student-year-2".equalsIgnoreCase(type)) {
+            p.setFullName("Mai Tran");
+            p.setEmail("mai.tran.student@example.com");
+            p.setPhone("+84 900 000 002");
+            p.setCurrentTitle("Software Engineering Student");
+            p.setIndustry("Software Engineering");
+            p.setYearOfStudy("Year 2");
+            p.setYearsOfExperience(0.0);
+            p.setEducation("B.Sc. Software Engineering (in progress, expected 2028)");
+            p.setLanguages("Vietnamese (Native), English (Intermediate)");
+            p.setSkills(List.of("Java", "Python", "Git", "SQL basics", "Data Structures", "HTML/CSS"));
+            p.setTargetRoles(List.of("Software Engineering Intern"));
+            p.setTargetLocations(List.of("Vietnam"));
+            p.setWillingToRelocate(false);
+            p.setTargetWorkType("ANY");
+            p.setBio("Second-year software engineering student. Coursework in data structures and "
+                    + "object-oriented programming, two class projects (a library management CLI and a "
+                    + "small web app built with a team of four). No professional experience yet; looking "
+                    + "to build strong fundamentals and a first portfolio.");
+        } else if ("student-year-4".equalsIgnoreCase(type)) {
+            p.setFullName("Khoa Pham");
+            p.setEmail("khoa.pham.student@example.com");
+            p.setPhone("+84 900 000 004");
+            p.setCurrentTitle("Final-year Software Engineering Student");
+            p.setIndustry("Software Engineering");
+            p.setYearOfStudy("Year 4");
+            p.setYearsOfExperience(0.0);
+            p.setEducation("B.Sc. Software Engineering (final year, expected 2026)");
+            p.setLanguages("Vietnamese (Native), English (Upper-intermediate)");
+            p.setSkills(List.of("Java", "Spring Boot", "React", "PostgreSQL", "REST API", "Git",
+                    "Unit Testing", "Docker basics", "Agile teamwork"));
+            p.setTargetRoles(List.of("Software Engineering Intern", "Junior Backend Developer"));
+            p.setTargetLocations(List.of("Vietnam", "Remote"));
+            p.setWillingToRelocate(false);
+            p.setTargetWorkType("ANY");
+            p.setBio("Final-year software engineering student. Capstone project: a full-stack booking "
+                    + "system built with Spring Boot and React in a team of five, with unit tests and a "
+                    + "CI pipeline. Comfortable working from a backlog and reviewing teammates' code. No "
+                    + "professional employment yet; targeting an internship or a junior role after graduation.");
+        } else {
+            // An unrecognised type used to fall through to a default sample, so a typo in the UI
+            // silently replaced the user's profile with someone else's.
+            return ResponseEntity.badRequest().body(Map.of("error",
+                    "Unknown sample profile '" + type + "'. Available samples: student-year-2, student-year-4."));
+        }
+
+        UserProfile saved = profileService.replaceProfileFromSample(p);
         return ResponseEntity.ok(profileService.toDto(saved));
     }
 }

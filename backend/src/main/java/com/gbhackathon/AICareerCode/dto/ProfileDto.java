@@ -11,6 +11,8 @@ public class ProfileDto {
     private String currentTitle;
     private String industry;
     private Double yearsOfExperience;
+    /** "Year 1" ... "Year 5+", or null when not specified. "" on input means "clear it". */
+    private String yearOfStudy;
     private String bio;
     private List<String> skills;
     private String education;
@@ -21,6 +23,17 @@ public class ProfileDto {
     private String targetWorkType;
     private String rawCvText;
     private LocalDateTime updatedAt;
+
+    /**
+     * Read-only for POST /api/profiles: a generic profile save never applies whatever the client
+     * sends here. Progress is changed only through PATCH /api/profiles/current/milestones/{id},
+     * which is the one path that can validate the milestone against the current roadmap without
+     * touching the profile revision.
+     */
+    private List<String> completedMilestones;
+
+    /** Read-only: id of the roadmap the stored progress belongs to; null when there is none yet. */
+    private String roadmapId;
 
     public Long getId() {
         return id;
@@ -148,6 +161,30 @@ public class ProfileDto {
 
     public void setRawCvText(String rawCvText) {
         this.rawCvText = rawCvText;
+    }
+
+    public String getYearOfStudy() {
+        return yearOfStudy;
+    }
+
+    public void setYearOfStudy(String yearOfStudy) {
+        this.yearOfStudy = yearOfStudy;
+    }
+
+    public List<String> getCompletedMilestones() {
+        return completedMilestones;
+    }
+
+    public void setCompletedMilestones(List<String> completedMilestones) {
+        this.completedMilestones = completedMilestones;
+    }
+
+    public String getRoadmapId() {
+        return roadmapId;
+    }
+
+    public void setRoadmapId(String roadmapId) {
+        this.roadmapId = roadmapId;
     }
 
     public LocalDateTime getUpdatedAt() {

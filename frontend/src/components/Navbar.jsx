@@ -1,12 +1,12 @@
-import React from 'react';
 import { Sparkles, User, Briefcase, Award, MessageSquare } from 'lucide-react';
 
 export default function Navbar({ activeTab, setActiveTab, isConnected }) {
+  // Ordered as the product works: describe yourself, see the gaps, practise, then look outward.
   const tabs = [
-    { id: 'profile', label: 'Profile & Resume', icon: User },
-    { id: 'matching', label: 'Job Matching', icon: Briefcase },
-    { id: 'audit', label: 'Resume Audit & Roadmap', icon: Award },
-    { id: 'chat', label: 'AI Career Coach', icon: MessageSquare },
+    { id: 'profile', label: 'My profile', icon: User },
+    { id: 'audit', label: 'Skills & roadmap', icon: Award },
+    { id: 'chat', label: 'Practice & coach', icon: MessageSquare },
+    { id: 'matching', label: 'Market opportunities', icon: Briefcase },
   ];
 
   return (
@@ -17,11 +17,11 @@ export default function Navbar({ activeTab, setActiveTab, isConnected }) {
         </div>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-            <span className="brand-title">AI Career Coach</span>
-            <span className="brand-badge">Global Ready</span>
+            <span className="brand-title">AI Skills Readiness Coach</span>
+            <span className="brand-badge">For students</span>
           </div>
           <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-            AI Career Navigator & Global Opportunity Matcher
+            Identify your skill gaps. Build your roadmap. Practice for the AI era.
           </p>
         </div>
       </div>
