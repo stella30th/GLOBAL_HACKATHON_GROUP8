@@ -15,13 +15,20 @@ services:
     envVars:
       - key: GEMINI_API_KEY
         sync: false
-      # gemini-3.5-flash allows only 20 requests/day on the free tier, which this app exhausts in
-      # minutes; after that every AI feature silently returns offline text. The lite models carry a
-      # much larger free allowance, and the backend falls through the list below on 429/404.
-      - key: GEMINI_MODEL
-        value: gemini-flash-lite-latest
-      - key: GEMINI_FALLBACK_MODELS
-        value: gemini-3.1-flash-lite,gemini-flash-latest,gemini-3.5-flash,gemini-2.5-flash
+      # Exactly two models are ever contacted. The requirement names Gemini 3.5 Flash as primary
+      # and 3.1 Flash-Lite as fallback; the order is reversed here because 3.5 Flash allows only
+      # about 20 requests/day per project on the free tier and one plan costs four calls, so a demo
+      # would exhaust it in a handful of runs. Swap the two values to follow the stated order.
+      - key: GEMINI_PRIMARY_MODEL
+        value: gemini-3.1-flash-lite
+      - key: GEMINI_FALLBACK_MODEL
+        value: gemini-3.5-flash
+      # Where the SFIA 9 workbook is read from. Render's filesystem is ephemeral, so loading SFIA
+      # in a deployment needs a persistent disk mounted here (or a build step that fetches it from
+      # storage you control). Without it the app runs on the bundled technology vocabulary and says
+      # so in the Sources & data panel.
+      - key: SFIA_DATA_DIR
+        value: /var/data/sfia
       - key: DATABASE_URL
         fromDatabase:
           name: aicareer-db

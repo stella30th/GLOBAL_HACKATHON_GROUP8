@@ -1,25 +1,26 @@
 package com.gbhackathon.AICareerCode.service;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.gbhackathon.AICareerCode.dto.CareerRoadmapDto;
-import com.gbhackathon.AICareerCode.dto.ResumeAuditDto;
+import com.gbhackathon.AICareerCode.dto.plan.CareerGoalDto;
+import com.gbhackathon.AICareerCode.dto.plan.LearningPlanDto;
 import com.gbhackathon.AICareerCode.model.UserProfile;
+import com.gbhackathon.AICareerCode.service.pipeline.LearningPlanPipeline;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.util.Optional;
-import java.util.UUID;
 
 /**
- * Owns the stored audit + roadmap ("learning snapshot") and the self-reported progress on it.
+ * Owns the stored plan and the self-reported progress on it.
  *
- * <p>The audit used to exist only in an in-memory cache keyed by profile revision. That was enough
- * to stop repeated Gemini calls, but not enough to make a milestone something you can tick: a
- * restart or an eviction produced a differently worded roadmap in different positions, and any
- * progress recorded against the old one pointed at nothing. The snapshot is therefore written to
- * the profile row with server-issued UUIDs assigned once, and it is the source of truth; the
- * caches in {@link AiCoachService} remain a pure optimisation in front of it.
+ * <p>Generation is explicit. An earlier design generated on read, which meant opening the page
+ * spent four model calls and a minute of waiting whether or not anything had changed - and on a
+ * per-day quota, a handful of page loads locked every later user out. Here a plan is produced only
+ * when the student asks for one, and a read serves what is stored or reports that there is nothing
+ * stored yet.
+ *
+ * <p>There is no in-memory cache in front of this. The stored snapshot is the cache: it survives a
+ * restart, which is what the phase ids need in order to mean the same thing tomorrow.
  */
 @Service
 public class LearningSnapshotService {
@@ -27,116 +28,105 @@ public class LearningSnapshotService {
     private static final Logger log = LoggerFactory.getLogger(LearningSnapshotService.class);
 
     /**
-     * Bumped whenever the stored shape or the prompt contract changes in a way that makes an older
-     * snapshot misleading. A snapshot from another version is discarded and regenerated.
+     * Bumped when the stored shape or the pipeline contract changes in a way that makes an older
+     * plan misleading. Version 1 was the pre-pipeline audit-and-roadmap snapshot; those are not
+     * upgraded in place, because they were produced without taxonomy, retrieval or a graph and
+     * presenting them as output of this pipeline would be a lie about where they came from.
      */
-    public static final int SNAPSHOT_VERSION = 1;
+    public static final int SNAPSHOT_VERSION = 2;
 
     private final LearningSnapshotStore store;
-    private final AiCoachService aiCoachService;
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final LearningPlanPipeline pipeline;
+    private final ProfileService profileService;
 
-    public LearningSnapshotService(LearningSnapshotStore store, AiCoachService aiCoachService) {
+    public LearningSnapshotService(LearningSnapshotStore store,
+                                   LearningPlanPipeline pipeline,
+                                   ProfileService profileService) {
         this.store = store;
-        this.aiCoachService = aiCoachService;
+        this.pipeline = pipeline;
+        this.profileService = profileService;
     }
 
-    /** Raised when the profile changed while an analysis was being generated. Maps to HTTP 409. */
+    /** Raised when the profile changed while a plan was being generated. Maps to HTTP 409. */
     public static class StaleProfileRevisionException extends RuntimeException {
         public StaleProfileRevisionException(String message) {
             super(message);
         }
     }
 
-    /** Raised when a progress update names a roadmap that is no longer current. HTTP 409. */
-    public static class StaleRoadmapException extends RuntimeException {
-        public StaleRoadmapException(String message) {
+    /** Raised when a progress update names a plan that is no longer current. HTTP 409. */
+    public static class StalePlanException extends RuntimeException {
+        public StalePlanException(String message) {
             super(message);
         }
     }
 
-    /** Raised when a milestone id is not part of the current roadmap. HTTP 404. */
-    public static class MilestoneNotFoundException extends RuntimeException {
-        public MilestoneNotFoundException(String message) {
+    /** Raised when an item id is not part of the current plan. HTTP 404. */
+    public static class CheckableNotFoundException extends RuntimeException {
+        public CheckableNotFoundException(String message) {
             super(message);
         }
     }
 
     /**
-     * The audit for this profile revision: the stored one while it is still valid, otherwise a
-     * freshly generated one, stored before it is returned.
+     * The stored plan for this profile and its current goal, if there is one.
+     *
+     * <p>Returns empty rather than generating. A caller that wants a plan built asks for it; a
+     * caller that is only rendering the page gets an honest "nothing yet", which is what the empty
+     * state on the roadmap panel is for.
      */
-    public ResumeAuditDto getOrCreateAudit(UserProfile profile) {
+    public Optional<LearningPlanDto> currentPlan(UserProfile profile) {
+        CareerGoalDto goal = profileService.goalOf(profile);
+        if (goal == null) {
+            return Optional.empty();
+        }
+        return store.read(profile, ProfileService.profileKey(profile), goal.key());
+    }
+
+    /**
+     * Whether a snapshot is present but belongs to an older pipeline or a different goal.
+     *
+     * <p>Worth distinguishing from "no plan at all": the student may remember generating one, and
+     * "your inputs changed, generate again" is a different message from "you have not made one yet".
+     */
+    public boolean hasSupersededSnapshot(UserProfile profile) {
+        String raw = store.rawSnapshot(profile);
+        return raw != null && !raw.isBlank() && currentPlan(profile).isEmpty();
+    }
+
+    /**
+     * Generates a plan and stores it.
+     *
+     * <p>The pipeline runs outside any transaction - four model calls take tens of seconds and must
+     * never hold a row lock - and the store then checks, under a lock, that the profile has not
+     * moved underneath it.
+     *
+     * @throws com.gbhackathon.AICareerCode.service.ai.AiUnavailableException     if neither model answers
+     * @throws com.gbhackathon.AICareerCode.service.ai.AiInvalidResponseException if the model could
+     *         not produce a valid result even after correction
+     */
+    public LearningPlanDto generate(UserProfile profile) {
+        CareerGoalDto goal = profileService.goalOf(profile);
+        if (goal == null) {
+            throw new IllegalStateException("A career goal is required before a plan can be generated.");
+        }
         String revision = ProfileService.profileKey(profile);
+        String goalKey = goal.key();
 
-        Optional<ResumeAuditDto> stored = store.read(profile, revision);
-        if (stored.isPresent()) {
-            return stored.get();
+        String superseded = store.rawSnapshot(profile);
+        if (superseded != null && !superseded.isBlank() && store.read(profile, revision, goalKey).isEmpty()) {
+            // Clear exactly the content this request read, so a concurrent generation that has
+            // already stored a good plan is not thrown away by this one.
+            store.invalidate(profile.getId(), superseded);
         }
 
-        String unusable = profile.getLearningSnapshotJson();
-        if (unusable != null && !unusable.isBlank()) {
-            // Present but unusable: wrong revision, wrong version, missing ids or unparseable.
-            // Clear it so a legacy row cannot keep failing every request that touches it — but
-            // only the exact content this request read, never whatever happens to be there by the
-            // time the lock is granted.
-            store.invalidate(profile.getId(), unusable);
-        }
-
-        // Generated outside any transaction: a Gemini round trip takes tens of seconds and must
-        // never hold a database lock.
-        ResumeAuditDto generated = copyWithNewIds(aiCoachService.auditProfile(profile));
-        log.info("Stored a new learning snapshot for profile {} (revision {})", profile.getId(), revision);
-
-        return store.store(profile.getId(), revision, generated);
+        LearningPlanDto plan = pipeline.generate(profile, goal);
+        log.info("Storing a new plan for profile {} (revision {})", profile.getId(), revision);
+        return store.store(profile.getId(), revision, goalKey, plan);
     }
 
-    /** The roadmap belonging to the current snapshot. Never generates a second, separate one. */
-    public CareerRoadmapDto getOrCreateRoadmap(UserProfile profile) {
-        return getOrCreateAudit(profile).getCareerRoadmap();
-    }
-
-    /** Ticks or unticks one milestone. See {@link LearningSnapshotStore#updateMilestone}. */
-    public UserProfile updateMilestoneProgress(Long profileId, String roadmapId, String milestoneId, boolean completed) {
-        return store.updateMilestone(profileId, roadmapId, milestoneId, completed);
-    }
-
-    /**
-     * A private copy of the generated audit, carrying freshly issued ids.
-     *
-     * <p>The copy is the point. {@link AiCoachService#auditProfile} caches per profile revision and
-     * hands the same instance to every caller, so writing ids into it wrote them into everyone's
-     * copy: two requests generating at once would each stamp their own ids over the shared object,
-     * and whichever finished second silently rewrote the ids the first had already serialised and
-     * returned. The lock at the storage step cannot help with that — the damage happens before it,
-     * in memory. Each request now stamps only its own object, and the lock decides which one wins.
-     *
-     * <p>The model is never asked to produce the ids: it repeats and reuses them across
-     * generations. An array index or the title is not an identifier either, since both change the
-     * moment the wording does.
-     */
-    ResumeAuditDto copyWithNewIds(ResumeAuditDto audit) {
-        if (audit == null) {
-            return null;
-        }
-        ResumeAuditDto copy;
-        try {
-            copy = objectMapper.readValue(objectMapper.writeValueAsBytes(audit), ResumeAuditDto.class);
-        } catch (Exception e) {
-            // Serialising it is also how it gets stored, so this should not happen; if it does, the
-            // request still needs an answer and a unique set of ids is better than a shared one.
-            log.warn("Could not copy the generated audit ({}); stamping ids on the original",
-                    e.getClass().getSimpleName());
-            copy = audit;
-        }
-
-        CareerRoadmapDto roadmap = copy.getCareerRoadmap();
-        if (roadmap != null) {
-            roadmap.setRoadmapId(UUID.randomUUID().toString());
-            for (CareerRoadmapDto.RoadmapMilestone milestone : roadmap.allMilestones()) {
-                milestone.setId(UUID.randomUUID().toString());
-            }
-        }
-        return copy;
+    /** Ticks or unticks one phase, activity or completion criterion. */
+    public UserProfile updateProgress(Long profileId, String planId, String itemId, boolean completed) {
+        return store.updateProgress(profileId, planId, itemId, completed);
     }
 }

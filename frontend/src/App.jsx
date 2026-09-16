@@ -1,13 +1,15 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import Navbar from './components/Navbar';
-import ProfileView from './components/ProfileView';
-import JobMatchingView from './components/JobMatchingView';
-import ResumeAuditView from './components/ResumeAuditView';
-import AiCoachChatView from './components/AiCoachChatView';
+import Header from './components/Header';
+import ProfileInputPanel from './components/ProfileInputPanel';
+import PlanWorkspace from './components/PlanWorkspace';
+import CoachChatPanel from './components/CoachChatPanel';
+import DataSourcePanel from './components/DataSourcePanel';
 import {
   fetchCurrentProfile,
   cacheProfile,
-  updateMilestoneProgress,
+  fetchPlan,
+  generatePlan,
+  updateProgress,
   DEFAULT_PROFILE,
   getApiBase,
   setCustomBackendUrl,
@@ -15,21 +17,18 @@ import {
   startKeepAlive,
   readCachedProfile,
 } from './api';
-import {
-  createJobPracticeRequest,
-  createRoadmapPracticeRequest,
-  profileRevisionOf,
-} from './practice';
 import { CheckCircle2, AlertTriangle, Loader2, RefreshCw } from 'lucide-react';
 import './App.css';
+// The workspace layout lives in its own sheet: App.css carries the shared primitives (buttons,
+// cards, form controls, chat bubbles) that both the page and the panels reuse.
+import './workspace.css';
 
 /**
  * Connection states.
  *
- * The app used to show a red "backend not reached" banner the moment its 8 second request failed,
- * which on Render's free tier is the normal first-visit experience: the instance sleeps after 15
- * minutes idle and takes around a minute to wake. Waking is not an error, so it gets its own state
- * and a neutral banner; `offline` is reserved for a genuine failure after the wake budget expires.
+ * A free hosting tier sleeps the instance after 15 minutes idle and takes about a minute to wake.
+ * Waking is not an error, so it gets its own state and a neutral banner; `offline` is reserved for
+ * a genuine failure after the wake budget expires.
  */
 const STATUS = {
   CONNECTING: 'connecting',
@@ -50,26 +49,33 @@ function initialTheme() {
   return window.matchMedia?.('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
 }
 
-const EMPTY_CHAT = { sessionId: 'initial', messages: [], loading: false, context: null, pendingRetry: null };
+const EMPTY_CHAT = { messages: [], loading: false, error: null };
+const EMPTY_PLAN_STATE = {
+  plan: null, completedItems: [], missingInputs: [], supersededSnapshot: false,
+};
 
+/**
+ * One page: inputs on the left, the learning path on the right.
+ *
+ * <p>There is no tab bar and no second destination. Everything else the product does - the chat,
+ * the data provenance - opens over this page rather than replacing it, so the path stays the thing
+ * a visitor sees and the thing they come back to.
+ */
 export default function App() {
-  const [activeTab, setActiveTab] = useState('profile');
-  // Show the last known profile immediately so the UI is populated while the server wakes.
   const [profile, setProfile] = useState(() => readCachedProfile() || DEFAULT_PROFILE);
+  const [planState, setPlanState] = useState(EMPTY_PLAN_STATE);
   const [status, setStatus] = useState(STATUS.CONNECTING);
   const [wakeSeconds, setWakeSeconds] = useState(0);
   const [backendInput, setBackendInput] = useState('');
   const [toast, setToast] = useState(null);
   const [theme, setTheme] = useState(initialTheme);
-  const connectingRef = useRef(false);
-
-  /**
-   * Chat and practice state live here rather than inside the chat view, because switching tabs
-   * unmounts the view. A conversation the user is midway through must survive a trip to the
-   * roadmap and back; only a page reload starts a new one.
-   */
+  const [generating, setGenerating] = useState(false);
+  const [planError, setPlanError] = useState(null);
+  const [busyItemId, setBusyItemId] = useState(null);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [dataPanelOpen, setDataPanelOpen] = useState(false);
   const [chat, setChat] = useState(EMPTY_CHAT);
-  const [practiceRequest, setPracticeRequest] = useState(null);
+  const connectingRef = useRef(false);
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
@@ -80,13 +86,6 @@ export default function App() {
       // The theme still works for this session when storage is unavailable.
     }
   }, [theme]);
-
-  const revision = profileRevisionOf(profile);
-  const lastRevisionRef = useRef(revision);
-  // Mirrors `revision` for callbacks that must not close over a stale render.
-  const revisionRef = useRef(revision);
-  // Tail of the progress-update chain. Ticks queue behind each other rather than racing.
-  const progressQueueRef = useRef(Promise.resolve());
 
   const connect = useCallback(async () => {
     if (connectingRef.current) return;
@@ -102,8 +101,9 @@ export default function App() {
         setStatus(STATUS.OFFLINE);
         return;
       }
-      const data = await fetchCurrentProfile();
-      setProfile(data);
+      const [profileData, plan] = await Promise.all([fetchCurrentProfile(), fetchPlan()]);
+      setProfile(profileData);
+      setPlanState(plan);
       setStatus(STATUS.ONLINE);
     } catch (err) {
       console.warn('Backend unreachable:', err.message);
@@ -124,108 +124,104 @@ export default function App() {
     return startKeepAlive();
   }, [status]);
 
-  // Kept in an effect rather than assigned during render: event handlers only ever run after the
-  // commit, so they still see the revision that is on screen.
-  useEffect(() => {
-    revisionRef.current = revision;
-  }, [revision]);
-
-  /**
-   * A real profile edit changes the revision, which means the analysis, the roadmap and the
-   * advice the coach has been giving all describe someone the user no longer is. Reset the chat
-   * rather than letting it continue from a premise that has changed underneath it. Ticking a
-   * milestone does not move the revision, so it does not land here.
-   */
-  useEffect(() => {
-    if (lastRevisionRef.current === revision) return;
-    lastRevisionRef.current = revision;
-    setChat({ ...EMPTY_CHAT, sessionId: `rev-${revision}` });
-    setPracticeRequest(null);
-  }, [revision]);
-
-  const showToast = (message) => {
+  const showToast = useCallback((message) => {
     setToast(message);
     setTimeout(() => setToast(null), 3500);
-  };
+  }, []);
+
+  /**
+   * Refreshes the stored plan after the profile or goal changed.
+   *
+   * <p>A changed input does not delete the plan on screen by itself - the server decides whether
+   * what it holds still answers the current question, and returns nothing when it does not. Doing
+   * that check on the server means one rule, rather than the browser guessing at a second one.
+   */
+  const refreshPlan = useCallback(async () => {
+    try {
+      const plan = await fetchPlan();
+      setPlanState(plan);
+    } catch (err) {
+      console.warn('Could not refresh the plan:', err.message);
+    }
+  }, []);
+
+  const handleProfileUpdate = useCallback((updated) => {
+    setProfile(updated);
+    cacheProfile(updated);
+    refreshPlan();
+  }, [refreshPlan]);
+
+  const handleGenerate = useCallback(async () => {
+    setGenerating(true);
+    setPlanError(null);
+    try {
+      const result = await generatePlan();
+      setPlanState({
+        plan: result.plan,
+        completedItems: result.completedItems || [],
+        missingInputs: [],
+        supersededSnapshot: false,
+      });
+      showToast('Your learning path is ready.');
+    } catch (err) {
+      setPlanError({
+        message: err.message,
+        detail: err.detail,
+        retryable: err.retryable !== false,
+      });
+      // The stored plan is left exactly as it was: a failed regeneration must not delete a plan
+      // the student was working through.
+    } finally {
+      setGenerating(false);
+    }
+  }, [showToast]);
+
+  /**
+   * Records one tick.
+   *
+   * <p>Pessimistic on purpose: the checkbox only moves once the server has accepted it. An
+   * optimistic tick that the server then rejects - stale plan, item gone - leaves a student
+   * believing they have recorded something they have not.
+   */
+  const handleToggle = useCallback(async (itemId, completed) => {
+    const planId = planState.plan?.planId;
+    if (!planId) return;
+
+    setBusyItemId(itemId);
+    try {
+      const result = await updateProgress(itemId, planId, completed);
+      setPlanState((current) => ({ ...current, completedItems: result.completedItems }));
+    } catch (err) {
+      if (err.status === 409 || err.status === 404) {
+        // The plan this tab is showing is not the current one any more. Pull the real one back so
+        // the page reloads instead of accumulating clicks that cannot be saved.
+        showToast(err.message);
+        await refreshPlan();
+      } else {
+        showToast(err.message || 'Could not save your progress');
+      }
+    } finally {
+      setBusyItemId(null);
+    }
+  }, [planState.plan?.planId, refreshPlan, showToast]);
 
   const handleConnectBackend = () => {
     if (!backendInput.trim()) return;
     setCustomBackendUrl(backendInput.trim());
-    showToast('Backend URL saved. Reconnecting...');
+    showToast('Backend URL saved. Reconnecting…');
     connect();
   };
-
-  const startRoadmapPractice = (milestone, roadmapId) => {
-    setPracticeRequest(createRoadmapPracticeRequest(profile, milestone, roadmapId));
-    setActiveTab('chat');
-  };
-
-  const startJobPractice = (job, question) => {
-    setPracticeRequest(createJobPracticeRequest(profile, job, question));
-    setActiveTab('chat');
-  };
-
-  /**
-   * Pessimistic: the checkbox only moves once the server has accepted it. An optimistic tick that
-   * the server then rejects (stale roadmap, milestone gone) leaves the user believing they have
-   * recorded something they have not.
-   *
-   * <p>Updates are queued one behind another. Each response carries the server's whole progress
-   * list, so two ticks in flight together could land out of order and let the earlier, shorter
-   * list overwrite the later one — the database stayed correct while the screen and the cached
-   * profile quietly lost a tick. Only one checkbox is disabled at a time by design, so ticking
-   * three boxes quickly is ordinary use, not an edge case.
-   */
-  const toggleMilestone = useCallback((milestoneId, roadmapId, completed) => {
-    const revisionAtRequest = revisionRef.current;
-
-    const run = progressQueueRef.current.then(async () => {
-      try {
-        const updated = await updateMilestoneProgress(milestoneId, roadmapId, completed);
-        // The profile was replaced while this was in flight (an edit, a CV upload, a sample), so
-        // this progress list belongs to a roadmap that no longer exists. Nothing about it is kept
-        // — not the screen, and not the browser cache the next page load reads from.
-        if (revisionRef.current !== revisionAtRequest) {
-          return { ok: false, reload: true, message: 'Your profile changed, so this was not applied.' };
-        }
-        setProfile(updated);
-        cacheProfile(updated);
-        return { ok: true };
-      } catch (err) {
-        if (err.status === 409 || err.status === 404) {
-          // The roadmap this tab is showing is not the current one any more. Pull the real profile
-          // back so the roadmap reloads instead of accumulating more clicks that cannot be saved.
-          try {
-            const fresh = await fetchCurrentProfile(undefined, { cache: false });
-            if (revisionRef.current === revisionAtRequest) {
-              setProfile(fresh);
-              cacheProfile(fresh);
-            }
-          } catch {
-            // Leave the stale profile in place; the message below still explains what happened.
-          }
-          showToast(err.message);
-          return { ok: false, reload: true, message: err.message };
-        }
-        showToast(err.message || 'Could not save your progress');
-        return { ok: false, reload: false, message: err.message };
-      }
-    });
-
-    // The queue must survive a rejection, or one failure would stall every later tick.
-    progressQueueRef.current = run.catch(() => {});
-    return run;
-  }, []);
 
   const isConnected = status === STATUS.ONLINE;
 
   return (
     <div className="app-container">
-      <Navbar
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
+      <Header
         theme={theme}
         onToggleTheme={() => setTheme((t) => (t === 'light' ? 'dark' : 'light'))}
+        onOpenChat={() => setChatOpen(true)}
+        onOpenDataPanel={() => setDataPanelOpen(true)}
+        chatAvailable={isConnected}
       />
 
       {status === STATUS.CONNECTING && (
@@ -235,8 +231,8 @@ export default function App() {
             Connecting to the server…
             {wakeSeconds > 6 && (
               <>
-                {' '}The server is waking up after being idle (the Render free plan sleeps after 15
-                minutes). The first request usually takes 50-60 seconds — <strong>{wakeSeconds}s</strong>.
+                {' '}The server is waking up after being idle. The first request usually takes
+                50-60 seconds — <strong>{wakeSeconds}s</strong>.
               </>
             )}
           </span>
@@ -248,13 +244,14 @@ export default function App() {
           <div className="conn-banner-msg">
             <AlertTriangle size={15} />
             <span>
-              Could not reach the server at <code>{getApiBase()}</code>. Running in offline preview mode.
+              Could not reach the server at <code>{getApiBase()}</code>. Nothing can be generated
+              until it answers.
             </span>
           </div>
           <div className="conn-banner-actions">
             <input
               type="text"
-              placeholder="Paste backend URL (e.g. https://aicareer-backend-xxxx.onrender.com)"
+              placeholder="Paste backend URL (e.g. https://your-backend.onrender.com)"
               value={backendInput}
               onChange={(e) => setBackendInput(e.target.value)}
               className="conn-input"
@@ -269,50 +266,53 @@ export default function App() {
         </div>
       )}
 
-      <main className="main-content">
-        {activeTab === 'profile' && (
-          <ProfileView
+      <section className="hero">
+        <h1 className="hero-title">
+          Build a learning path that fits <em>your</em> profile and the job you want
+        </h1>
+        <p className="hero-subtitle">
+          Upload your CV or type it in, say what you are aiming at, and get a phased plan — which
+          skills to learn, in what order, how many hours each takes, and where to learn them.
+        </p>
+      </section>
+
+      <main className="workspace">
+        <div className="workspace-input">
+          <ProfileInputPanel
             profile={profile}
-            setProfile={setProfile}
-            onGoToRoadmap={() => setActiveTab('audit')}
-            onGoToMatching={() => setActiveTab('matching')}
+            setProfile={handleProfileUpdate}
+            onGenerate={handleGenerate}
+            generating={generating}
+            isConnected={isConnected}
             showToast={showToast}
+            missingInputs={planState.missingInputs}
           />
-        )}
+        </div>
 
-        {activeTab === 'matching' && (
-          <JobMatchingView
-            profile={profile}
-            setProfile={setProfile}
-            showToast={showToast}
+        <div className="workspace-plan">
+          <PlanWorkspace
+            planState={planState}
+            generating={generating}
+            error={planError}
+            onToggle={handleToggle}
+            busyItemId={busyItemId}
+            onRetry={handleGenerate}
             isConnected={isConnected}
-            onPracticeQuestion={startJobPractice}
           />
-        )}
-
-        {activeTab === 'audit' && (
-          <ResumeAuditView
-            profile={profile}
-            isConnected={isConnected}
-            onPracticeMilestone={startRoadmapPractice}
-            onToggleMilestone={toggleMilestone}
-          />
-        )}
-
-        {activeTab === 'chat' && (
-          <AiCoachChatView
-            profile={profile}
-            isConnected={isConnected}
-            chat={chat}
-            setChat={setChat}
-            practiceRequest={practiceRequest}
-            onPracticeConsumed={() => setPracticeRequest(null)}
-            onBackToRoadmap={() => setActiveTab('audit')}
-            onToggleMilestone={toggleMilestone}
-            profileRevision={revision}
-          />
-        )}
+        </div>
       </main>
+
+      <CoachChatPanel
+        open={chatOpen}
+        onClose={() => setChatOpen(false)}
+        chat={chat}
+        setChat={setChat}
+        hasPlan={Boolean(planState.plan)}
+      />
+
+      {/* Mounted only while open, so it reads the server each time it is opened rather than
+          showing whatever it happened to fetch the first time. */}
+      {dataPanelOpen && <DataSourcePanel onClose={() => setDataPanelOpen(false)} />}
 
       {toast && (
         <div className="toast">

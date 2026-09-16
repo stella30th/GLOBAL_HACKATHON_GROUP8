@@ -68,6 +68,16 @@
 			<artifactId>pdfbox</artifactId>
 			<version>3.0.4</version>
 		</dependency>
+		<!--
+		  Reads the SFIA 9 skill-description workbook an operator supplies. SFIA publishes the
+		  framework as .xlsx (and RDF); this project ships no copy of it, so the dependency is
+		  present but idle until a file is dropped into the configured directory.
+		-->
+		<dependency>
+			<groupId>org.apache.poi</groupId>
+			<artifactId>poi-ooxml</artifactId>
+			<version>5.4.0</version>
+		</dependency>
 		<dependency>
 			<groupId>com.fasterxml.jackson.core</groupId>
 			<artifactId>jackson-databind</artifactId>

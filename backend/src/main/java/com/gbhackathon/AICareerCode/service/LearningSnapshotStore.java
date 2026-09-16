@@ -1,8 +1,8 @@
 package com.gbhackathon.AICareerCode.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.gbhackathon.AICareerCode.dto.CareerRoadmapDto;
-import com.gbhackathon.AICareerCode.dto.ResumeAuditDto;
+import com.gbhackathon.AICareerCode.dto.plan.LearningPathDto;
+import com.gbhackathon.AICareerCode.dto.plan.LearningPlanDto;
 import com.gbhackathon.AICareerCode.model.UserProfile;
 import com.gbhackathon.AICareerCode.repository.UserProfileRepository;
 import org.slf4j.Logger;
@@ -18,7 +18,7 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * Every database read and write of the learning snapshot and the progress attached to it.
+ * Every database read and write of the stored plan and the progress attached to it.
  *
  * <p>Kept as its own bean rather than as private methods on {@link LearningSnapshotService}
  * because each of these is a short transaction that takes a row lock, and a {@code @Transactional}
@@ -40,58 +40,61 @@ public class LearningSnapshotStore {
     }
 
     /**
-     * The stored audit, if it belongs to this revision, is on the current version and still
-     * carries its server-issued ids. Anything else reads as "no snapshot".
+     * The stored plan, if it belongs to this profile revision AND this goal, is on the current
+     * pipeline version, and still carries its server-issued ids. Anything else reads as "no plan".
+     *
+     * <p>The goal check is what stops the most misleading failure available here: a student changes
+     * the target role from six months of data engineering to one month of frontend work, and is
+     * shown the previous plan as though it answered the new question.
      */
-    public Optional<ResumeAuditDto> read(UserProfile profile, String revision) {
+    public Optional<LearningPlanDto> read(UserProfile profile, String revision, String goalKey) {
         String json = profile.getLearningSnapshotJson();
         if (json == null || json.isBlank()
                 || !Objects.equals(revision, profile.getLearningSnapshotProfileKey())
+                || !Objects.equals(goalKey, profile.getLearningSnapshotGoalKey())
                 || profile.getLearningSnapshotVersion() == null
                 || profile.getLearningSnapshotVersion() != LearningSnapshotService.SNAPSHOT_VERSION) {
             return Optional.empty();
         }
         try {
-            ResumeAuditDto audit = objectMapper.readValue(json, ResumeAuditDto.class);
-            if (audit != null && isServable(audit.getCareerRoadmap())) {
-                return Optional.of(audit);
+            LearningPlanDto plan = objectMapper.readValue(json, LearningPlanDto.class);
+            if (plan != null && isServable(plan)) {
+                return Optional.of(plan);
             }
-            log.info("Learning snapshot for profile {} is structurally incomplete; it will be regenerated",
+            log.info("Stored plan for profile {} is structurally incomplete; it will not be served",
                     profile.getId());
             return Optional.empty();
         } catch (Exception e) {
-            // Never log the body: it is derived from the user's CV.
-            log.warn("Learning snapshot for profile {} could not be read ({}); it will be regenerated",
+            // Never log the body: it is derived from the student's CV.
+            log.warn("Stored plan for profile {} could not be read ({}); it will not be served",
                     profile.getId(), e.getClass().getSimpleName());
             return Optional.empty();
         }
     }
 
     /**
-     * Whether a stored roadmap can still be put in front of a student.
+     * Whether a stored plan can still be put in front of a student.
      *
      * <p>Validation happens on the way out, not only on the way in. Repairing at generation time
-     * fixes what this build writes; it does nothing for a snapshot an earlier build already stored,
-     * and a snapshot lives until the student next edits their profile. A roadmap saved without its
-     * six- or twelve-month stage would otherwise have stayed on screen indefinitely, complete and
-     * plausible-looking apart from two empty columns. Failing the check here sends it back through
-     * generation and clears the progress with it, which is the same rule an edit follows.
+     * fixes what this build writes; it does nothing for a plan an earlier build already stored, and
+     * a plan lives until the student next changes their profile or their goal. A plan saved with a
+     * phase that lost its id would otherwise stay on screen indefinitely, looking complete, with a
+     * checkbox attached to nothing.
      */
-    private boolean isServable(CareerRoadmapDto roadmap) {
-        if (roadmap == null
-                || roadmap.getRoadmapId() == null || roadmap.getRoadmapId().isBlank()
-                || isEmpty(roadmap.getMonths3()) || isEmpty(roadmap.getMonths6()) || isEmpty(roadmap.getMonths12())) {
+    private boolean isServable(LearningPlanDto plan) {
+        if (plan.planId == null || plan.planId.isBlank()
+                || plan.learningPath == null
+                || plan.learningPath.phases == null || plan.learningPath.phases.isEmpty()
+                || plan.skillGaps == null || plan.skillGaps.isEmpty()) {
             return false;
         }
-        return roadmap.allMilestones().stream().allMatch(m ->
-                m != null
-                        && m.getId() != null && !m.getId().isBlank()
-                        && m.getTitle() != null && !m.getTitle().isBlank()
-                        && m.getDescription() != null && !m.getDescription().isBlank());
-    }
-
-    private static boolean isEmpty(List<CareerRoadmapDto.RoadmapMilestone> stage) {
-        return stage == null || stage.isEmpty();
+        for (LearningPathDto.Phase phase : plan.learningPath.phases) {
+            if (phase == null || phase.id == null || phase.id.isBlank()
+                    || phase.title == null || phase.title.isBlank()) {
+                return false;
+            }
+        }
+        return plan.skillGaps.stream().allMatch(gap -> gap != null && gap.id != null && !gap.id.isBlank());
     }
 
     /**
@@ -100,8 +103,8 @@ public class LearningSnapshotStore {
      * <p>{@code observedJson} is the exact content the caller read and rejected. Under the lock it
      * must still be what is stored, otherwise this does nothing. Without that check the method was
      * "clear whatever is there now", and two requests hitting the same corrupt snapshot would race:
-     * the first regenerates and stores a good snapshot, the second then arrives with its own stale
-     * view and deletes it, taking the milestone ids and any ticks with it.
+     * the first regenerates and stores a good plan, the second then arrives with its own stale view
+     * and deletes it, taking the phase ids and any ticks with it.
      *
      * @return true when this call is the one that cleared it
      */
@@ -119,70 +122,73 @@ public class LearningSnapshotStore {
     }
 
     /**
-     * Stores a freshly generated audit under a short lock.
+     * Stores a freshly generated plan under a short lock.
      *
-     * @return the snapshot that is now current: the one just written, or the one a concurrent
-     *         request had already committed for the same revision, so both callers converge on
-     *         the same milestone ids.
+     * @return the plan that is now current: the one just written, or the one a concurrent request
+     *         had already committed for the same revision and goal, so both callers converge on the
+     *         same phase ids.
      * @throws LearningSnapshotService.StaleProfileRevisionException if the profile changed while
-     *         the analysis was being generated
+     *         the plan was being generated
      */
     @Transactional
-    public ResumeAuditDto store(Long profileId, String revision, ResumeAuditDto audit) {
+    public LearningPlanDto store(Long profileId, String revision, String goalKey, LearningPlanDto plan) {
         UserProfile fresh = profileRepository.findByIdForUpdate(profileId).orElseThrow(() ->
                 new LearningSnapshotService.StaleProfileRevisionException("The profile no longer exists."));
 
         if (!ProfileService.profileKey(fresh).equals(revision)) {
             throw new LearningSnapshotService.StaleProfileRevisionException(
-                    "Your profile changed while the analysis was being prepared. Reload to see the new one.");
+                    "Your profile changed while the plan was being prepared. Generate it again to "
+                            + "get a plan for the profile you have now.");
         }
 
-        Optional<ResumeAuditDto> alreadyStored = read(fresh, revision);
+        Optional<LearningPlanDto> alreadyStored = read(fresh, revision, goalKey);
         if (alreadyStored.isPresent()) {
             return alreadyStored.get();
         }
 
         try {
-            fresh.setLearningSnapshotJson(objectMapper.writeValueAsString(audit));
+            fresh.setLearningSnapshotJson(objectMapper.writeValueAsString(plan));
             fresh.setLearningSnapshotVersion(LearningSnapshotService.SNAPSHOT_VERSION);
             fresh.setLearningSnapshotProfileKey(revision);
-            // New roadmap means new ids, so progress recorded against the previous one cannot carry.
+            fresh.setLearningSnapshotGoalKey(goalKey);
+            // A new plan means new ids, so progress recorded against the previous one cannot carry.
             fresh.setCompletedMilestones(null);
             profileRepository.save(fresh);
         } catch (Exception e) {
-            // Failing to store is not a reason to fail the request: the user still gets their
-            // analysis, they just cannot tick it off until a later attempt stores successfully.
-            log.warn("Could not store the learning snapshot for profile {}: {}", profileId, e.getMessage());
+            // Failing to store is not a reason to fail the request: the student still gets their
+            // plan, they just cannot tick it off until a later attempt stores successfully. It is
+            // logged rather than swallowed because it means the next reload will show nothing.
+            log.warn("Could not store the plan for profile {}: {}", profileId, e.getMessage());
         }
-        return audit;
+        return plan;
     }
 
     /**
-     * Ticks or unticks one milestone inside a locked read-modify-write, so a fast double click
-     * cannot lose an update. {@code updatedAt} is deliberately untouched.
+     * Ticks or unticks one checkable item inside a locked read-modify-write, so a fast double click
+     * cannot lose an update. {@code updatedAt} is deliberately untouched: a checkbox is not an edit
+     * to the profile, and moving the revision would delete the plan being ticked.
      */
     @Transactional
-    public UserProfile updateMilestone(Long profileId, String roadmapId, String milestoneId, boolean completed) {
+    public UserProfile updateProgress(Long profileId, String planId, String itemId, boolean completed) {
         UserProfile profile = profileRepository.findByIdForUpdate(profileId).orElseThrow(() ->
-                new LearningSnapshotService.StaleRoadmapException("The profile no longer exists."));
+                new LearningSnapshotService.StalePlanException("The profile no longer exists."));
 
-        ResumeAuditDto audit = read(profile, ProfileService.profileKey(profile)).orElseThrow(() ->
-                new LearningSnapshotService.StaleRoadmapException(
-                        "There is no current analysis to record progress against. Reload your roadmap."));
+        LearningPlanDto plan = read(profile, ProfileService.profileKey(profile),
+                profile.getLearningSnapshotGoalKey()).orElseThrow(() ->
+                new LearningSnapshotService.StalePlanException(
+                        "There is no current plan to record progress against. Generate one first."));
 
-        CareerRoadmapDto roadmap = audit.getCareerRoadmap();
-        if (!roadmap.getRoadmapId().equals(roadmapId)) {
-            throw new LearningSnapshotService.StaleRoadmapException(
-                    "This roadmap is no longer the current one. Reload your roadmap.");
+        if (!plan.planId.equals(planId)) {
+            throw new LearningSnapshotService.StalePlanException(
+                    "This plan is no longer the current one. Reload the page.");
         }
-        boolean known = roadmap.allMilestones().stream().anyMatch(m -> milestoneId.equals(m.getId()));
-        if (!known) {
-            throw new LearningSnapshotService.MilestoneNotFoundException(
-                    "That milestone is not part of your current roadmap.");
+        if (!plan.learningPath.allCheckableIds().contains(itemId)) {
+            throw new LearningSnapshotService.CheckableNotFoundException(
+                    "That item is not part of your current plan.");
         }
 
         Set<String> ids = new LinkedHashSet<>(profileService.readCompletedMilestones(profile));
-        boolean mutated = completed ? ids.add(milestoneId) : ids.remove(milestoneId);
+        boolean mutated = completed ? ids.add(itemId) : ids.remove(itemId);
         if (mutated) {
             profile.setCompletedMilestones(profileService.writeCompletedMilestones(new ArrayList<>(ids)));
             profileRepository.save(profile);
@@ -190,4 +196,15 @@ public class LearningSnapshotStore {
         return profile;
     }
 
+    /** Raw stored JSON, used by {@link LearningSnapshotService} to invalidate exactly what it read. */
+    public String rawSnapshot(UserProfile profile) {
+        return profile.getLearningSnapshotJson();
+    }
+
+    /** Every checkable id in the stored plan, or an empty list when there is none. */
+    public List<String> checkableIds(UserProfile profile) {
+        return read(profile, ProfileService.profileKey(profile), profile.getLearningSnapshotGoalKey())
+                .map(plan -> plan.learningPath.allCheckableIds())
+                .orElseGet(List::of);
+    }
 }

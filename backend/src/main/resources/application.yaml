@@ -1,8 +1,8 @@
 server:
   port: ${PORT:8080}
   compression:
-    # Job listings and AI analyses are sizeable JSON payloads; compressing them is the cheapest
-    # win available on Render's free tier, where bandwidth and latency dominate response time.
+    # Plan documents are sizeable JSON payloads; compressing them is the cheapest win available
+    # on a free hosting tier, where bandwidth and latency dominate response time.
     enabled: true
     mime-types: application/json,text/plain,text/css,text/javascript,application/javascript
     min-response-size: 1024
@@ -19,6 +19,8 @@ spring:
   jpa:
     database-platform: ${SPRING_JPA_DATABASE_PLATFORM:}
     hibernate:
+      # Adds the new columns and tables on start-up. It never drops a column, so the job-matching
+      # and year-of-study columns this version stopped mapping survive untouched in existing rows.
       ddl-auto: update
     show-sql: false
     # Closing the session at the end of the service call rather than at the end of the request
@@ -38,19 +40,39 @@ spring:
 ai:
   gemini:
     api-key: ${GEMINI_API_KEY:}
-    # Primary model. gemini-3.5-flash is capable but its free tier allows only 20 requests per day
-    # per project, which this app exhausts quickly; the lite models have a far larger allowance.
-    model: ${GEMINI_MODEL:gemini-flash-lite-latest}
-    # Tried in order when the primary is rate limited (429) or unavailable to the key (404).
-    fallback-models: ${GEMINI_FALLBACK_MODELS:gemini-3.1-flash-lite,gemini-flash-latest,gemini-3.5-flash,gemini-2.5-flash}
-    timeout-seconds: ${GEMINI_TIMEOUT_SECONDS:45}
+    # Exactly two models are ever contacted, and both are named here so the choice is visible.
+    #
+    # The requirement names Gemini 3.5 Flash as primary and Gemini 3.1 Flash-Lite as fallback.
+    # The order is reversed here on purpose: 3.5 Flash allows only about 20 requests per day per
+    # project on the free tier, and one plan costs four calls, so a demo would exhaust it after a
+    # handful of runs and every later request would fail. Flash-Lite has a far larger allowance.
+    # To follow the requirement's order exactly, swap these two environment variables - no code
+    # change is needed:
+    #   GEMINI_PRIMARY_MODEL=gemini-3.5-flash
+    #   GEMINI_FALLBACK_MODEL=gemini-3.1-flash-lite
+    primary-model: ${GEMINI_PRIMARY_MODEL:gemini-3.1-flash-lite}
+    fallback-model: ${GEMINI_FALLBACK_MODEL:gemini-3.5-flash}
+    timeout-seconds: ${GEMINI_TIMEOUT_SECONDS:60}
+    # Attempts per model for a transient transport failure, before moving to the other model.
+    max-attempts-per-model: ${GEMINI_MAX_ATTEMPTS:2}
+  pipeline:
+    # How many times a step may ask the model to correct an answer that failed validation. Each
+    # attempt is a real API call against a per-day quota, so this stays small.
+    max-repair-attempts: ${AI_MAX_REPAIR_ATTEMPTS:2}
 
-jobs:
-  themuse:
-    # Optional. The Muse answers unauthenticated requests from a developer machine but returns 403
-    # to datacenter IPs; a free key from https://www.themuse.com/developers/api/v2 restores the
-    # source. Without it the other five boards are used and The Muse is skipped.
-    api-key: ${THE_MUSE_API_KEY:}
+taxonomy:
+  sfia:
+    # Where the SFIA 9 skill-descriptions workbook is read from. SFIA is licensed content obtained
+    # by registering at sfia-online.org, so this repository ships no copy: drop the .xlsx here and
+    # restart, or call POST /api/plan/data-status/reload. Until then the taxonomy runs on the
+    # bundled technology vocabulary alone and says so in the data panel.
+    directory: ${SFIA_DATA_DIR:./data/sfia}
+
+retrieval:
+  # Checking a few hundred URLs adds a minute to start-up, which on a free tier is the whole boot
+  # budget. Run it on demand with POST /api/plan/data-status/verify-urls instead.
+  verify-urls-on-startup: ${RETRIEVAL_VERIFY_URLS:false}
+  url-check-timeout-seconds: ${RETRIEVAL_URL_TIMEOUT:6}
 
 logging:
   level:

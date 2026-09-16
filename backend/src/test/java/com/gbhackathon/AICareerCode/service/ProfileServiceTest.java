@@ -1,169 +1,140 @@
 package com.gbhackathon.AICareerCode.service;
 
-import com.gbhackathon.AICareerCode.dto.ProfileDto;
+import com.gbhackathon.AICareerCode.dto.plan.CareerGoalDto;
 import com.gbhackathon.AICareerCode.model.UserProfile;
-import com.gbhackathon.AICareerCode.repository.UserProfileRepository;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
-import org.springframework.context.annotation.Import;
 
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * The profile contract the rest of the product depends on: which values a year of study may take,
- * and exactly when a save is allowed to throw away the analysis and the progress built on it.
+ * Validation of the goal, and the "what is still missing" message the generate button shows.
+ *
+ * <p>The repository is never touched by anything under test here, so it is left null rather than
+ * mocked - a stub would only make it harder to see that these are pure functions.
  */
-@DataJpaTest
-@Import(ProfileService.class)
 class ProfileServiceTest {
 
-    @Autowired
-    private ProfileService profileService;
+    private final ProfileService service = new ProfileService(null);
 
-    @Autowired
-    private UserProfileRepository profileRepository;
-
-    private ProfileDto baseDto() {
-        ProfileDto dto = new ProfileDto();
-        dto.setFullName("Mai Tran");
-        dto.setEmail("mai.tran.student@example.com");
-        dto.setCurrentTitle("Software Engineering Student");
-        dto.setIndustry("Software Engineering");
-        dto.setYearOfStudy("Year 2");
-        dto.setYearsOfExperience(0.0);
-        dto.setSkills(List.of("Java", "Git"));
-        dto.setTargetRoles(List.of("Software Engineering Intern"));
-        dto.setTargetLocations(List.of("Vietnam"));
-        dto.setWillingToRelocate(false);
-        dto.setTargetWorkType("ANY");
-        dto.setBio("Second-year student.");
-        return dto;
+    @Test
+    void acceptsTheCanonicalSeniorityValuesInAnyCase() {
+        assertEquals("JUNIOR", ProfileService.normalizeSeniority("junior"));
+        assertEquals("MID", ProfileService.normalizeSeniority("  Mid "));
+        assertNull(ProfileService.normalizeSeniority(""));
+        assertNull(ProfileService.normalizeSeniority(null));
     }
 
-    /** Pretends an analysis has already been generated and ticked, so resets are observable. */
-    private void giveItASnapshot(UserProfile profile) {
-        profile.setLearningSnapshotJson("{\"careerRoadmap\":{\"roadmapId\":\"rm-1\"}}");
-        profile.setLearningSnapshotVersion(LearningSnapshotService.SNAPSHOT_VERSION);
-        profile.setLearningSnapshotProfileKey(ProfileService.profileKey(profile));
-        profile.setCompletedMilestones("[\"m-1\"]");
-        profileRepository.save(profile);
+    /**
+     * Rejected rather than stored and silently ignored later. A seniority the pipeline does not
+     * understand changes every required level in the analysis.
+     */
+    @Test
+    void rejectsASeniorityOutsideTheList() {
+        assertThrows(ProfileValidationException.class, () -> ProfileService.normalizeSeniority("PRINCIPAL"));
     }
 
     @Test
-    void yearOfStudyRoundTripsAndCanBeCleared() {
-        UserProfile saved = profileService.saveOrUpdateProfile(baseDto());
-        assertEquals("Year 2", saved.getYearOfStudy());
-        assertEquals("Year 2", profileService.toDto(saved).getYearOfStudy());
+    void acceptsOnlyTheOfferedPlanLengths() {
+        assertEquals(1, ProfileService.normalizeDuration(1));
+        assertEquals(3, ProfileService.normalizeDuration(3));
+        assertEquals(6, ProfileService.normalizeDuration(6));
+        assertNull(ProfileService.normalizeDuration(null));
+        assertThrows(ProfileValidationException.class, () -> ProfileService.normalizeDuration(12));
+        assertThrows(ProfileValidationException.class, () -> ProfileService.normalizeDuration(0));
+    }
 
-        // An omitted field keeps the stored value; the form posts partial objects.
-        ProfileDto omitted = new ProfileDto();
-        omitted.setBio("Updated bio");
-        assertEquals("Year 2", profileService.saveOrUpdateProfile(omitted).getYearOfStudy());
-
-        // An empty string is the "Not specified" option, and it clears the stored year.
-        ProfileDto cleared = new ProfileDto();
-        cleared.setYearOfStudy("");
-        assertNull(profileService.saveOrUpdateProfile(cleared).getYearOfStudy());
+    /**
+     * Not a judgement about how hard anyone works: a plan generated against 80 hours a week is a
+     * plan for a situation that will not hold, and the hours it promises are the one number a
+     * student actually relies on.
+     */
+    @Test
+    void boundsTheWeeklyStudyBudget() {
+        assertEquals(1, ProfileService.normalizeHoursPerWeek(1));
+        assertEquals(ProfileService.MAX_HOURS_PER_WEEK,
+                ProfileService.normalizeHoursPerWeek(ProfileService.MAX_HOURS_PER_WEEK));
+        assertThrows(ProfileValidationException.class, () -> ProfileService.normalizeHoursPerWeek(0));
+        assertThrows(ProfileValidationException.class,
+                () -> ProfileService.normalizeHoursPerWeek(ProfileService.MAX_HOURS_PER_WEEK + 1));
     }
 
     @Test
-    void yearOfStudyOutsideTheCanonicalListIsRejected() {
-        ProfileDto dto = baseDto();
-        dto.setYearOfStudy("third year");
-        assertThrows(ProfileValidationException.class, () -> profileService.saveOrUpdateProfile(dto));
+    void noGoalUntilATargetRoleIsSet() {
+        UserProfile profile = new UserProfile();
+        assertNull(service.goalOf(profile));
 
-        // The same value from a model is dropped instead, so one bad field cannot fail a CV upload.
-        assertNull(ProfileService.normalizeYearOfStudyLenient("third year"));
-        assertEquals("Year 3", ProfileService.normalizeYearOfStudyLenient("year 3"));
+        profile.setTargetRole("Backend Developer");
+        profile.setTargetSeniority("JUNIOR");
+        profile.setPlanDurationMonths(3);
+        profile.setPlanHoursPerWeek(8);
+
+        CareerGoalDto goal = service.goalOf(profile);
+        assertEquals("Backend Developer", goal.targetRole);
+        assertEquals(104, goal.budgetHours());
     }
 
     @Test
-    void savingTheSameValuesTwiceKeepsTheAnalysisAndTheProgress() {
-        UserProfile saved = profileService.saveOrUpdateProfile(baseDto());
-        giveItASnapshot(saved);
-        var revisionBefore = saved.getUpdatedAt();
+    void namesEveryMissingInputOnAnEmptyProfile() {
+        List<String> missing = service.missingPlanInputs(new UserProfile());
 
-        UserProfile again = profileService.saveOrUpdateProfile(baseDto());
+        assertEquals(5, missing.size(), missing.toString());
+        assertTrue(missing.stream().anyMatch(m -> m.contains("upload a CV")), missing.toString());
+        assertTrue(missing.stream().anyMatch(m -> m.contains("role")), missing.toString());
+        assertTrue(missing.stream().anyMatch(m -> m.contains("hours a week")), missing.toString());
+    }
 
-        assertEquals(revisionBefore, again.getUpdatedAt(), "a no-op save must not move the revision");
-        assertNotNull(again.getLearningSnapshotJson());
-        assertEquals(List.of("m-1"), profileService.readCompletedMilestones(again));
+    /** Raw CV text counts as a profile even before the skill list has been filled in. */
+    @Test
+    void acceptsRawCvTextAsProfileContent() {
+        UserProfile profile = new UserProfile();
+        profile.setRawCvText("Nguyen Van A, final year, built a booking system ...");
+        profile.setTargetRole("Backend Developer");
+        profile.setTargetSeniority("JUNIOR");
+        profile.setPlanDurationMonths(3);
+        profile.setPlanHoursPerWeek(8);
+
+        assertTrue(service.missingPlanInputs(profile).isEmpty());
+    }
+
+    /**
+     * A tick writes only the progress list. If it moved the revision it would invalidate the very
+     * plan it was recording progress against.
+     */
+    @Test
+    void roundTripsTheProgressList() {
+        UserProfile profile = new UserProfile();
+        assertTrue(service.readCompletedMilestones(profile).isEmpty());
+
+        profile.setCompletedMilestones(service.writeCompletedMilestones(List.of("a", "b")));
+        assertEquals(List.of("a", "b"), service.readCompletedMilestones(profile));
     }
 
     @Test
-    void changingAnyEditableFieldResetsTheAnalysisAndTheProgress() {
-        UserProfile saved = profileService.saveOrUpdateProfile(baseDto());
-        giveItASnapshot(saved);
-        var revisionBefore = saved.getUpdatedAt();
+    void treatsCorruptedProgressAsEmptyRatherThanFailingTheProfileRead() {
+        UserProfile profile = new UserProfile();
+        profile.setCompletedMilestones("not json at all");
 
-        // Even a contact field counts: the MVP invalidates on any real content change.
-        ProfileDto edit = new ProfileDto();
-        edit.setPhone("+84 900 000 002");
-        UserProfile after = profileService.saveOrUpdateProfile(edit);
-
-        assertTrue(after.getUpdatedAt().isAfter(revisionBefore));
-        assertNull(after.getLearningSnapshotJson());
-        assertNull(after.getLearningSnapshotProfileKey());
-        assertTrue(profileService.readCompletedMilestones(after).isEmpty());
+        assertTrue(service.readCompletedMilestones(profile).isEmpty());
     }
 
+    /**
+     * The revision is the key that decides whether a stored plan still belongs to this profile, so
+     * two different states must never produce the same one.
+     */
     @Test
-    void progressFieldsOnTheIncomingDtoAreIgnored() {
-        UserProfile saved = profileService.saveOrUpdateProfile(baseDto());
-        giveItASnapshot(saved);
+    void profileKeyChangesWithTheUpdatedTimestamp() {
+        UserProfile profile = new UserProfile();
+        profile.setId(7L);
+        profile.setUpdatedAt(java.time.LocalDateTime.of(2026, 9, 16, 12, 0));
+        String before = ProfileService.profileKey(profile);
 
-        ProfileDto forged = baseDto();
-        forged.setCompletedMilestones(List.of("m-1", "m-2", "not-a-real-milestone"));
-        forged.setRoadmapId("rm-forged");
-        UserProfile after = profileService.saveOrUpdateProfile(forged);
+        profile.setUpdatedAt(profile.getUpdatedAt().plusNanos(1000));
 
-        assertEquals(List.of("m-1"), profileService.readCompletedMilestones(after));
-        assertEquals("rm-1", profileService.readSnapshotRoadmapId(after));
-    }
-
-    @Test
-    void loadingASampleReplacesEverythingIncludingThePreviousCv() {
-        ProfileDto withCv = baseDto();
-        withCv.setRawCvText("A previous candidate's CV text, long enough to matter.");
-        profileService.replaceProfileFromCv(withCv);
-
-        ProfileDto sample = new ProfileDto();
-        sample.setFullName("Khoa Pham");
-        sample.setIndustry("Software Engineering");
-        sample.setYearOfStudy("Year 4");
-        sample.setSkills(List.of("Spring Boot"));
-        UserProfile after = profileService.replaceProfileFromSample(sample);
-
-        assertNull(after.getRawCvText(), "a sample must not inherit the previous person's CV");
-        assertEquals("Khoa Pham", after.getFullName());
-        assertEquals("Year 4", after.getYearOfStudy());
-        assertTrue(after.getTargetRoleList().isEmpty(), "unset fields are cleared, not merged");
-    }
-
-    @Test
-    void aCvWithoutAYearClearsThePreviousOne() {
-        profileService.saveOrUpdateProfile(baseDto());
-
-        ProfileDto parsed = baseDto();
-        parsed.setYearOfStudy(null);
-        parsed.setRawCvText("Some CV text");
-        UserProfile after = profileService.replaceProfileFromCv(parsed);
-
-        assertNull(after.getYearOfStudy(), "a silent CV must not keep the year from the old profile");
-    }
-
-    @Test
-    void aProfileWithNoStoredProgressReadsAsEmptyRatherThanFailing() {
-        UserProfile saved = profileService.saveOrUpdateProfile(baseDto());
-        saved.setCompletedMilestones(null);
-        assertTrue(profileService.readCompletedMilestones(saved).isEmpty());
-
-        // A legacy row could hold anything; it must not break every profile read.
-        saved.setCompletedMilestones("Close the skill gaps, Rewrite the CV");
-        assertTrue(profileService.readCompletedMilestones(saved).isEmpty());
-        assertNull(profileService.readSnapshotRoadmapId(saved));
+        assertTrue(!before.equals(ProfileService.profileKey(profile)));
     }
 }

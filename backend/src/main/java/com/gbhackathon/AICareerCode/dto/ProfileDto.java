@@ -3,6 +3,14 @@ package com.gbhackathon.AICareerCode.dto;
 import java.time.LocalDateTime;
 import java.util.List;
 
+/**
+ * The profile and career goal as the browser sees them.
+ *
+ * <p>{@code rawCvText} travels with it so the extraction screen can show the student what the
+ * model actually read and let them correct it. {@code completedMilestones} and {@code planId} are
+ * read-only here: progress moves only through the dedicated endpoint, which validates each tick
+ * against the current plan.
+ */
 public class ProfileDto {
     private Long id;
     private String fullName;
@@ -11,29 +19,29 @@ public class ProfileDto {
     private String currentTitle;
     private String industry;
     private Double yearsOfExperience;
-    /** "Year 1" ... "Year 5+", or null when not specified. "" on input means "clear it". */
-    private String yearOfStudy;
     private String bio;
     private List<String> skills;
     private String education;
     private String languages;
+    /** Roles the CV named as an objective; offered as suggestions for {@link #targetRole}. */
     private List<String> targetRoles;
-    private List<String> targetLocations;
-    private Boolean willingToRelocate;
-    private String targetWorkType;
     private String rawCvText;
     private LocalDateTime updatedAt;
 
-    /**
-     * Read-only for POST /api/profiles: a generic profile save never applies whatever the client
-     * sends here. Progress is changed only through PATCH /api/profiles/current/milestones/{id},
-     * which is the one path that can validate the milestone against the current roadmap without
-     * touching the profile revision.
-     */
+    // ---- career goal ----
+    private String targetRole;
+    private String targetSeniority;
+    private String targetJobDescription;
+    private Integer planDurationMonths;
+    private Integer planHoursPerWeek;
+
+    // ---- read-only, set by the server ----
+
+    /** Checkable ids the student has ticked. Ignored on the way in. */
     private List<String> completedMilestones;
 
-    /** Read-only: id of the roadmap the stored progress belongs to; null when there is none yet. */
-    private String roadmapId;
+    /** Id of the stored plan these ticks belong to, or null when there is no current plan. */
+    private String planId;
 
     public Long getId() {
         return id;
@@ -73,6 +81,14 @@ public class ProfileDto {
 
     public void setCurrentTitle(String currentTitle) {
         this.currentTitle = currentTitle;
+    }
+
+    public String getIndustry() {
+        return industry;
+    }
+
+    public void setIndustry(String industry) {
+        this.industry = industry;
     }
 
     public Double getYearsOfExperience() {
@@ -123,38 +139,6 @@ public class ProfileDto {
         this.targetRoles = targetRoles;
     }
 
-    public List<String> getTargetLocations() {
-        return targetLocations;
-    }
-
-    public void setTargetLocations(List<String> targetLocations) {
-        this.targetLocations = targetLocations;
-    }
-
-    public Boolean getWillingToRelocate() {
-        return willingToRelocate;
-    }
-
-    public void setWillingToRelocate(Boolean willingToRelocate) {
-        this.willingToRelocate = willingToRelocate;
-    }
-
-    public String getTargetWorkType() {
-        return targetWorkType;
-    }
-
-    public void setTargetWorkType(String targetWorkType) {
-        this.targetWorkType = targetWorkType;
-    }
-
-    public String getIndustry() {
-        return industry;
-    }
-
-    public void setIndustry(String industry) {
-        this.industry = industry;
-    }
-
     public String getRawCvText() {
         return rawCvText;
     }
@@ -163,12 +147,52 @@ public class ProfileDto {
         this.rawCvText = rawCvText;
     }
 
-    public String getYearOfStudy() {
-        return yearOfStudy;
+    public LocalDateTime getUpdatedAt() {
+        return updatedAt;
     }
 
-    public void setYearOfStudy(String yearOfStudy) {
-        this.yearOfStudy = yearOfStudy;
+    public void setUpdatedAt(LocalDateTime updatedAt) {
+        this.updatedAt = updatedAt;
+    }
+
+    public String getTargetRole() {
+        return targetRole;
+    }
+
+    public void setTargetRole(String targetRole) {
+        this.targetRole = targetRole;
+    }
+
+    public String getTargetSeniority() {
+        return targetSeniority;
+    }
+
+    public void setTargetSeniority(String targetSeniority) {
+        this.targetSeniority = targetSeniority;
+    }
+
+    public String getTargetJobDescription() {
+        return targetJobDescription;
+    }
+
+    public void setTargetJobDescription(String targetJobDescription) {
+        this.targetJobDescription = targetJobDescription;
+    }
+
+    public Integer getPlanDurationMonths() {
+        return planDurationMonths;
+    }
+
+    public void setPlanDurationMonths(Integer planDurationMonths) {
+        this.planDurationMonths = planDurationMonths;
+    }
+
+    public Integer getPlanHoursPerWeek() {
+        return planHoursPerWeek;
+    }
+
+    public void setPlanHoursPerWeek(Integer planHoursPerWeek) {
+        this.planHoursPerWeek = planHoursPerWeek;
     }
 
     public List<String> getCompletedMilestones() {
@@ -179,19 +203,11 @@ public class ProfileDto {
         this.completedMilestones = completedMilestones;
     }
 
-    public String getRoadmapId() {
-        return roadmapId;
+    public String getPlanId() {
+        return planId;
     }
 
-    public void setRoadmapId(String roadmapId) {
-        this.roadmapId = roadmapId;
-    }
-
-    public LocalDateTime getUpdatedAt() {
-        return updatedAt;
-    }
-
-    public void setUpdatedAt(LocalDateTime updatedAt) {
-        this.updatedAt = updatedAt;
+    public void setPlanId(String planId) {
+        this.planId = planId;
     }
 }

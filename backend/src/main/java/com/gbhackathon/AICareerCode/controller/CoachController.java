@@ -1,62 +1,38 @@
 package com.gbhackathon.AICareerCode.controller;
 
-import com.gbhackathon.AICareerCode.dto.CareerRoadmapDto;
 import com.gbhackathon.AICareerCode.dto.ChatMessageDto;
-import com.gbhackathon.AICareerCode.dto.ResumeAuditDto;
 import com.gbhackathon.AICareerCode.model.UserProfile;
-import com.gbhackathon.AICareerCode.service.AiCoachService;
-import com.gbhackathon.AICareerCode.service.LearningSnapshotService;
+import com.gbhackathon.AICareerCode.service.CoachChatService;
 import com.gbhackathon.AICareerCode.service.ProfileService;
+import com.gbhackathon.AICareerCode.service.ai.AiUnavailableException;
+import com.gbhackathon.AICareerCode.service.ai.GeminiClient;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * The "ask about your plan" panel and the AI diagnostics behind it.
+ *
+ * <p>Chat is a support tool here, not a second product surface: it explains the plan the pipeline
+ * produced and cannot modify it.
+ */
 @RestController
 @RequestMapping("/api/coach")
 @CrossOrigin(origins = "*")
 public class CoachController {
 
     private final ProfileService profileService;
-    private final AiCoachService aiCoachService;
-    private final LearningSnapshotService learningSnapshotService;
+    private final CoachChatService chatService;
+    private final GeminiClient gemini;
 
-    public CoachController(ProfileService profileService,
-                           AiCoachService aiCoachService,
-                           LearningSnapshotService learningSnapshotService) {
+    public CoachController(ProfileService profileService, CoachChatService chatService, GeminiClient gemini) {
         this.profileService = profileService;
-        this.aiCoachService = aiCoachService;
-        this.learningSnapshotService = learningSnapshotService;
-    }
-
-    /**
-     * The stored analysis for the current profile, generating and storing it on first request.
-     *
-     * <p>Both this and {@code /roadmap} read the same snapshot, so the milestone ids the Skills tab
-     * renders are the ids the progress endpoint will accept. Repeat calls do not regenerate: to get
-     * a different analysis a student has to actually change their profile.
-     */
-    @GetMapping("/audit")
-    public ResponseEntity<?> getProfileAudit() {
-        UserProfile profile = profileService.getCurrentOrCreateProfile();
-        try {
-            return ResponseEntity.ok(learningSnapshotService.getOrCreateAudit(profile));
-        } catch (LearningSnapshotService.StaleProfileRevisionException e) {
-            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));
-        }
-    }
-
-    @GetMapping("/roadmap")
-    public ResponseEntity<?> getCareerRoadmap() {
-        UserProfile profile = profileService.getCurrentOrCreateProfile();
-        try {
-            CareerRoadmapDto roadmap = learningSnapshotService.getOrCreateRoadmap(profile);
-            return ResponseEntity.ok(roadmap);
-        } catch (LearningSnapshotService.StaleProfileRevisionException e) {
-            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));
-        }
+        this.chatService = chatService;
+        this.gemini = gemini;
     }
 
     public static class ChatRequest {
@@ -80,34 +56,40 @@ public class CoachController {
         }
     }
 
+    @PostMapping("/chat")
+    public ResponseEntity<Map<String, Object>> chat(@RequestBody ChatRequest request) {
+        UserProfile profile = profileService.getCurrentOrCreateProfile();
+        String question = request.getMessage() != null ? request.getMessage().trim() : "";
+        if (question.isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Please enter a question."));
+        }
+
+        try {
+            CoachChatService.Reply reply = chatService.chat(profile, request.getHistory(), question);
+            Map<String, Object> body = new LinkedHashMap<>();
+            body.put("reply", reply.text());
+            // The model that actually answered, so the panel never attributes an answer to a model
+            // that did not produce it.
+            body.put("model", reply.model());
+            return ResponseEntity.ok(body);
+        } catch (AiUnavailableException e) {
+            // No scripted reply stands in for this. A canned answer in a coaching panel reads as
+            // advice, and the student has no way to tell it apart from the real thing.
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(Map.of(
+                    "error", "The AI service could not be reached, so there is no answer to show. "
+                            + "Please try again in a moment.",
+                    "detail", String.valueOf(e.getDetail()),
+                    "retryable", true));
+        }
+    }
+
     /**
-     * Live diagnosis of the AI backend. Because every AI feature degrades to offline text rather
-     * than failing loudly, this endpoint is the way to tell whether Gemini is actually answering.
-     * Pass {@code ?probe=true} to perform one real round trip to the model.
+     * Live diagnosis of the AI backend. Pass {@code ?probe=true} for one real round trip, which
+     * is the only way to tell a working key from one that is merely present.
      */
     @GetMapping("/ai-status")
     public ResponseEntity<Map<String, Object>> getAiStatus(
             @RequestParam(name = "probe", defaultValue = "false") boolean probe) {
-        return ResponseEntity.ok(probe ? aiCoachService.probeAi() : aiCoachService.aiStatus());
-    }
-
-    @PostMapping("/chat")
-    public ResponseEntity<Map<String, String>> chatWithCoach(@RequestBody ChatRequest request) {
-        UserProfile profile = profileService.getCurrentOrCreateProfile();
-        String userMsg = request.getMessage() != null ? request.getMessage().trim() : "";
-        if (userMsg.isEmpty()) {
-            return ResponseEntity.badRequest().body(Map.of("reply", "Please enter a question."));
-        }
-        String reply = aiCoachService.chat(profile, request.getHistory(), userMsg);
-        Object lastWorkingModel = aiCoachService.aiStatus().get("lastWorkingModel");
-        Object lastError = aiCoachService.aiStatus().get("lastError");
-        boolean fromAi = lastError == null && lastWorkingModel != null;
-
-        Map<String, String> body = new java.util.LinkedHashMap<>();
-        body.put("reply", reply);
-        // Let the UI show honestly whether the answer came from Gemini or the offline responder.
-        body.put("generatedBy", fromAi ? "gemini" : "offline");
-        body.put("model", fromAi && lastWorkingModel != null ? lastWorkingModel.toString() : null);
-        return ResponseEntity.ok(body);
+        return ResponseEntity.ok(probe ? gemini.probe() : gemini.status());
     }
 }

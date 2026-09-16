@@ -1,131 +1,251 @@
-# AI Skills Readiness Coach for Students 🎓
+# Skill Path 🧭
 
-> **Identify your skill gaps. Build your roadmap. Practice for the AI era.**
+> **Phân tích hồ sơ và mục tiêu nghề nghiệp để xây dựng một learning path cá nhân hoá, có căn cứ và nguồn học rõ ràng.**
 >
-> Nền tảng giúp sinh viên nhìn ra khoảng trống kỹ năng, dựng lộ trình học 12 tháng và luyện tập
-> theo từng mốc — dùng **Google Gemini**, **Spring Boot** và **React (Vite)**.
-> Demo tập trung vào Software Engineering nhưng đọc được hồ sơ **mọi ngành**.
+> Một trang, một việc: bạn đưa CV và vị trí đang nhắm tới, hệ thống trả về lộ trình học theo giai
+> đoạn — học kỹ năng gì, theo thứ tự nào, tốn bao nhiêu giờ, và học ở đâu.
+> Spring Boot + React (Vite) + Google Gemini.
 
 ---
 
-## 🌟 Ba bước chính
+## 🌟 Sản phẩm làm gì
 
-### 1. Identify — nhìn ra mình đang ở đâu
-Nhập hồ sơ thủ công hoặc tải CV lên. Gemini đọc CV để nhận diện đúng lĩnh vực (vi mạch, cơ khí,
-tài chính, y tế, marketing…) và trích xuất kỹ năng **thật sự có trong CV**; khi AI không khả dụng,
-bộ từ điển đa ngành làm dự phòng và **để trống** thay vì suy đoán.
+Vào trang là thấy ngay khu vực **learning path** chiếm phần lớn màn hình, bên cạnh là cột nhập
+liệu. Không có tab điều hướng: sản phẩm chỉ làm một việc, và một hàng tab ngang hàng sẽ nói điều
+ngược lại với người dùng lần đầu.
 
-Phần đánh giá chỉ ra điểm mạnh, khoảng trống và **chỗ thiếu bằng chứng**. Khi hồ sơ im lặng về một
-kỹ năng, hệ thống ghi `Not enough evidence in your profile` chứ không kết luận người dùng không biết
-kỹ năng đó.
+**Đầu vào** (cột trái):
+1. Hồ sơ — tải CV PDF hoặc nhập thủ công. Sau khi tải lên, form hiện đúng những gì AI đọc được,
+   có thể sửa. Toàn bộ phân tích phía sau dựa trên các trường này.
+2. Mục tiêu — vị trí nhắm tới, cấp độ (Intern/Junior/Mid/Senior), độ dài lộ trình **1 / 3 / 6
+   tháng**, số giờ học mỗi tuần, và tuỳ chọn dán mô tả công việc.
 
-### 2. Develop — lộ trình 3 / 6 / 12 tháng
-Lộ trình bám theo **năm học** (`Year 1`…`Year 5+`, hoặc để trống) và hồ sơ thực tế: năm 1–2 ưu tiên
-nền tảng và dự án học phần, năm 3 hướng portfolio/thực tập, năm 4–5+ hoàn thiện portfolio và chuẩn
-bị internship/junior. Mỗi lộ trình luôn có ít nhất một mốc **AI_FLUENCY** với hành động cụ thể và
-sản phẩm đầu ra kiểm tra được — không phải "học AI" chung chung. Nếu model quên, backend tự bổ sung
-mốc dự phòng trước khi lưu.
+**Đầu ra** (cột phải), bốn phần:
 
-### 3. Practice — luyện tập và tự đánh dấu tiến độ
-Mỗi mốc có nút **Practice this skill**: coach đặt **một** bài tập, chờ trả lời, rồi chấm 0–2 cho mỗi
-tiêu chí (đúng/phù hợp · lập luận · bằng chứng và cách kiểm chứng) và góp ý. Đây là **phản hồi luyện
-tập, không phải chứng chỉ**. Câu hỏi phỏng vấn trong phần deep-dive cũng có nút
-**Practice this question** làm nguồn bài tập bổ sung.
+| Phần | Nội dung |
+|---|---|
+| **Learning path** | Các giai đoạn: mục tiêu, kỹ năng, kỹ năng tiên quyết, hoạt động cụ thể, dự án đầu ra, tiêu chí tự đánh giá, số giờ, và nguồn học cho từng kỹ năng. Tick được từng mục. |
+| **Skill gaps** | Khoảng cách giữa bằng chứng trong hồ sơ và yêu cầu vị trí, kèm mức độ, thứ tự ưu tiên, độ chắc chắn, và **bằng chứng nào sẽ thay đổi đánh giá đó**. |
+| **Skill graph** | Đồ thị quan hệ kỹ năng. Không phải hình vẽ trang trí — thứ tự các giai đoạn được tính từ chính các cạnh tiên quyết này. |
+| **CV review** | Điểm 0–100 cho **CV như một tài liệu**, kèm điểm mạnh, chỗ người đọc chưa thấy được, từ khoá ATS và các dòng nên viết lại. |
 
-### Nguồn tham khảo thị trường
-Tin tuyển dụng lấy từ **6 nguồn** (Remotive, Jobicy, Remote OK, Himalayas, The Muse, Arbeitnow) để
-cho thấy nhà tuyển dụng đang hỏi gì. Đây là tài liệu tham khảo — **không cần** có job match mới luyện
-tập được.
+Chat là một **panel nhỏ** ("Hỏi về lộ trình") mở đè lên trang, giải thích phân tích và các giai
+đoạn. Nó không sửa được lộ trình và không tick hộ bạn.
 
-Mọi kết quả AI đều hiển thị rõ **nguồn tạo ra nó**: nhãn tên model khi Gemini trả lời, hoặc nhãn
-"AI tạm không khả dụng" khi hệ thống chạy ở chế độ dự phòng — không bao giờ ngụy trang nội dung
-dự phòng thành câu trả lời của AI.
+---
+
+## 📐 Năm phương pháp, và chúng được triển khai thật ở đâu
+
+Không có prompt lớn nào chỉ nhắc tên năm phương pháp. Mỗi bước có dữ liệu trung gian riêng, có
+kiểm tra riêng, và bước sau thao tác trên kết quả bước trước.
+
+| Phương pháp | Triển khai ở đâu | Bằng chứng nó thực sự chạy |
+|---|---|---|
+| **LLM CV Extraction** | [`CvParserService`](backend/src/main/java/com/gbhackathon/AICareerCode/service/CvParserService.java) — PDFBox đọc text, Gemini trích xuất có cấu trúc | Form hiện đúng dữ liệu đã trích, người dùng sửa được trước khi tạo lộ trình |
+| **Skill Taxonomy (SFIA 9)** | [`TaxonomyService`](backend/src/main/java/com/gbhackathon/AICareerCode/service/taxonomy/TaxonomyService.java) + [`SfiaTaxonomyLoader`](backend/src/main/java/com/gbhackathon/AICareerCode/service/taxonomy/SfiaTaxonomyLoader.java) → [`TaxonomyMappingStep`](backend/src/main/java/com/gbhackathon/AICareerCode/service/pipeline/TaxonomyMappingStep.java) | Model **chỉ được dùng các mã đã truy xuất**; mã ngoài danh sách bị từ chối và bắt sinh lại |
+| **Skill Gap Analysis** | [`GapAndGraphStep`](backend/src/main/java/com/gbhackathon/AICareerCode/service/pipeline/GapAndGraphStep.java) | Mỗi gap phải có `rationale`, `evidenceStatus` và thứ tự ưu tiên không trùng |
+| **Knowledge Graph** | `GapAndGraphStep.orderGraph()` — topological sort trên các cạnh `PREREQUISITE_OF` | Thứ tự tính ra được truyền vào bước lập lộ trình làm ràng buộc; giai đoạn dạy kỹ năng trước tiên quyết của nó bị từ chối |
+| **RAG** | [`ResourceRetrievalService`](backend/src/main/java/com/gbhackathon/AICareerCode/service/retrieval/ResourceRetrievalService.java) + [`Bm25Index`](backend/src/main/java/com/gbhackathon/AICareerCode/service/retrieval/Bm25Index.java) | Model nhận một shortlist tài liệu **có thật trong DB** và chỉ được trích dẫn bằng `resourceKey`; URL do server gắn vào từ catalogue |
+
+Pipeline chạy theo thứ tự trong
+[`LearningPlanPipeline`](backend/src/main/java/com/gbhackathon/AICareerCode/service/pipeline/LearningPlanPipeline.java):
+
+```
+CV extraction (lúc upload)
+  → retrieval #1 trên taxonomy
+  → taxonomy mapping + yêu cầu vị trí        (1 lần gọi Gemini)
+  → gap analysis + knowledge graph           (1 lần gọi Gemini)
+  → topological sort (code, không phải AI)
+  → retrieval #2 trên kho tài liệu
+  → learning path                            (1 lần gọi Gemini)
+  → CV review                                (1 lần gọi Gemini)
+```
+
+Bỏ bất kỳ bước nào thì bước sau mất thứ nó thao tác lên.
+
+---
+
+## 🚫 Quy tắc "không hardcode nhận xét"
+
+Toàn bộ nhận xét cá nhân, skill gap, thứ tự ưu tiên và nội dung lộ trình do AI tạo ra từ hồ sơ và
+dữ liệu tham chiếu đã truy xuất. **Không có template dự phòng nào phía sau.**
+
+Khi cả hai model không trả lời:
+
+- `POST /api/plan/generate` trả **503** kèm lý do thật, không tạo gì cả.
+- Giao diện nói rõ: *"Nothing was written in its place."* và cho thử lại.
+- Lộ trình đã lưu trước đó **không bị xoá** — một lần sinh lại thất bại không được phép làm mất
+  lộ trình bạn đang học.
+- Chat cũng vậy: không có câu trả lời soạn sẵn đóng vai lời khuyên.
+
+`GeminiClient` **ném exception** thay vì trả `null`, chính là để không caller nào có thể lặng lẽ
+thay bằng text viết sẵn.
+
+**Code được phép làm:** validate schema, cấp UUID, lưu snapshot, sort topo và phát hiện chu trình,
+cộng giờ, truy xuất tài liệu, kiểm tra citation, kiểm tra URL, lưu tiến độ người dùng tự tick.
+
+**Taxonomy và catalogue nguồn học là tri thức đầu vào, không phải kết luận soạn sẵn.** Chúng mô tả
+ngành nghề và tài liệu công khai; việc cái nào xuất hiện trong lộ trình của ai, ở giai đoạn nào, vì
+lý do gì là do AI quyết từ hồ sơ cụ thể.
+
+Nếu model trả kết quả sai hợp đồng, [`AiStepRunner`](backend/src/main/java/com/gbhackathon/AICareerCode/service/pipeline/AiStepRunner.java)
+gửi lại **đúng quy tắc đã vi phạm** và cho sửa tối đa 2 lần; vẫn hỏng thì request thất bại.
+
+---
+
+## ⚙️ Cấu hình
+
+### Gemini (bắt buộc)
+
+| Biến môi trường | Mặc định | Ghi chú |
+|---|---|---|
+| `GEMINI_API_KEY` | *(bắt buộc)* | Lấy tại [Google AI Studio](https://aistudio.google.com/apikey). Chỉ đặt qua biến môi trường, **không commit**. |
+| `GEMINI_PRIMARY_MODEL` | `gemini-3.1-flash-lite` | Model chính. |
+| `GEMINI_FALLBACK_MODEL` | `gemini-3.5-flash` | Model dự phòng. |
+| `GEMINI_TIMEOUT_SECONDS` | `60` | |
+| `AI_MAX_REPAIR_ATTEMPTS` | `2` | Số lần yêu cầu model sửa một câu trả lời sai hợp đồng. |
+
+> ⚠️ **Về thứ tự hai model.** Yêu cầu ban đầu ghi model chính là **Gemini 3.5 Flash**, dự phòng là
+> **Gemini 3.1 Flash-Lite**. Mặc định ở đây **đảo lại**, vì `gemini-3.5-flash` ở gói miễn phí chỉ
+> cho khoảng **20 request/ngày/project**, mà một lộ trình tốn 4 lần gọi — demo sẽ hết quota sau
+> 4–5 lần chạy. Cả hai vẫn nằm trong đúng hai model được yêu cầu, chỉ khác thứ tự ưu tiên.
+> Muốn đúng nguyên văn yêu cầu, đổi hai biến môi trường, **không cần sửa code**:
+> ```
+> GEMINI_PRIMARY_MODEL=gemini-3.5-flash
+> GEMINI_FALLBACK_MODEL=gemini-3.1-flash-lite
+> ```
+
+Hệ thống chỉ liên hệ **đúng hai model này**. Chuyển sang model dự phòng chỉ xảy ra với 429 (hết
+quota), 404 (key không thấy model) và 5xx. Key sai hoặc request sai định dạng thì dừng ngay, vì
+model thứ hai sẽ hỏng y hệt.
+
+Kiểm tra AI có thật sự trả lời:
+
+```bash
+curl "http://localhost:8080/api/coach/ai-status?probe=true"
+```
+
+### SFIA 9 (cần bạn cung cấp)
+
+SFIA là nội dung **có bản quyền**: miễn phí cho phát triển cá nhân và phần lớn nhu cầu nội bộ của
+doanh nghiệp, nhưng phải **đăng ký tài khoản** mới tải được. Repo này không chứa và sẽ không chứa
+bản sao nào.
+
+**Cách lấy:**
+
+1. Đăng ký tài khoản tại [sfia-online.org](https://sfia-online.org/en/sfia-9/documentation).
+2. Vào **SFIA 9 → Documentation**, tải file Excel *"SFIA 9 skill descriptions"* (`.xlsx`).
+3. Đặt file vào `backend/data/sfia/` (thư mục này đã nằm trong `.gitignore`).
+4. Khởi động lại backend, hoặc gọi `POST /api/plan/data-status/reload`.
+
+Đổi vị trí bằng `SFIA_DATA_DIR`.
+
+**Khi chưa có file:** hệ thống vẫn chạy trên bộ từ vựng công nghệ đi kèm (66 mục trong
+`backend/src/main/resources/taxonomy/technology-extensions.json`), và **nói rõ** điều đó ở panel
+*Sources & data* cùng trong phần provenance của mọi lộ trình sinh ra trong thời gian đó. Các mã
+hiển thị khi đó **không phải** mã SFIA chính thức.
+
+Bộ từ vựng công nghệ là phần mở rộng của dự án, **không phải** SFIA: SFIA mô tả kỹ năng nghề
+nghiệp ("Programming/software development") chứ không liệt kê công nghệ ("React"). Mỗi dòng mở rộng
+có gợi ý mã SFIA tương ứng, nhưng mã đó **chỉ được ghi nhận khi file SFIA thật xác nhận mã tồn tại**.
+
+### Kho tài liệu học (RAG)
+
+94 tài liệu trong `backend/src/main/resources/retrieval/learning-resources.json`: tài liệu chính
+chủ (MDN, PostgreSQL, Spring, PyTorch…), khoá đại học (MIT OCW, Harvard CS50), và nền tảng học có
+uy tín. Sửa file này rồi gọi `POST /api/plan/data-status/reload` là đủ.
+
+Kiểm tra link còn sống:
+
+```bash
+curl -X POST http://localhost:8080/api/plan/data-status/verify-urls
+```
+
+Chạy thủ công chứ không chạy lúc khởi động — vài trăm request HTTP sẽ thêm cả phút vào mỗi lần
+cold start. **Link truy cập được chỉ chứng minh trang tồn tại**, không chứng minh nội dung phù hợp
+trình độ hay còn miễn phí, và giao diện ghi đúng như vậy.
+
+### Các tài nguyên khác
+
+Không cần embedding model, không cần vector database, không cần search API. Retrieval dùng BM25
+trong bộ nhớ trên vài trăm dòng — đủ tốt ở quy mô này và không tốn thêm quota.
+
+---
+
+## 🔄 Lưu trữ, tiến độ và vòng đời dữ liệu
+
+Lộ trình được lưu thành **snapshot** trong hàng hồ sơ, kèm `planId` và id từng giai đoạn / hoạt
+động / tiêu chí do **server** cấp (UUID). Id không đổi qua reload, qua xoá cache và qua restart
+backend — tiến độ đã tick vẫn trỏ đúng chỗ.
+
+Snapshot gắn với **cả hồ sơ lẫn mục tiêu**:
+
+| Thao tác | Lộ trình đã lưu | Tiến độ |
+|---|---|---|
+| Sửa hồ sơ (có thay đổi thật) | Không còn được phục vụ, phải tạo lại | Xoá khi lưu lộ trình mới |
+| Bấm Save mà không đổi gì | Giữ nguyên | Giữ |
+| Đổi vị trí / cấp độ / thời lượng / giờ mỗi tuần | Không còn khớp, phải tạo lại — **nhưng đổi ngược lại thì lộ trình cũ khớp lại** | Giữ cho tới khi lưu lộ trình mới |
+| Tải CV mới | Hồ sơ bị thay, lộ trình phải tạo lại. **Mục tiêu được giữ** | Xoá khi lưu lộ trình mới |
+| Tick / untick | Giữ | Chỉ đổi danh sách đã tick |
+| Reload trang / restart backend | Giữ (đọc lại từ DB) | Giữ |
+| Sinh lộ trình mới thất bại | **Giữ nguyên lộ trình cũ** | Giữ |
+
+Khi đầu vào đã đổi, API trả `supersededSnapshot: true` và giao diện nói *"bạn đã tạo một lộ trình
+trước đó, nhưng hồ sơ hoặc mục tiêu đã thay đổi"* — khác hẳn với "bạn chưa tạo lần nào".
+
+### ⚠️ Thay đổi schema
+
+Bản này **thêm bảng** `taxonomy_skills`, `learning_resources`, và **thêm cột** vào `user_profiles`:
+`target_role`, `target_seniority`, `target_job_description`, `plan_duration_months`,
+`plan_hours_per_week`, `learning_snapshot_goal_key`.
+
+`spring.jpa.hibernate.ddl-auto: update` tự thêm khi khởi động. Môi trường không dùng chế độ đó cần
+migration tương ứng.
+
+**Không cần xoá database.** Các cột của Job Matching (`target_locations`, `willing_to_relocate`,
+`target_work_type`) và `year_of_study` không còn được map nhưng **vẫn nguyên trong DB** —
+`ddl-auto: update` không bao giờ xoá cột. Bảng `job_opportunities` cũng được giữ nguyên.
+
+Snapshot cũ (`learning_snapshot_version = 1`) được sinh ra khi **chưa có** taxonomy, retrieval hay
+graph. Chúng bị nhận diện và **không được phục vụ**, vì trình bày chúng như kết quả của pipeline
+mới là nói sai về nguồn gốc của chúng.
 
 ---
 
 ## 📌 Giới hạn cần nói rõ
 
-- **Điểm ATS là điểm chất lượng CV/hồ sơ**, không phải điểm năng lực và không phải "AI readiness
-  score". Giao diện ghi rõ điều này ngay cạnh con số.
-- **Tiến độ do người dùng tự xác nhận.** Tick/untick là lựa chọn của sinh viên; AI không tự đánh dấu
-  hoàn thành, và điểm 0–6 trong phần luyện tập không bao giờ được dùng để tự tick.
-- Luyện tập từ câu hỏi tuyển dụng **không** hoàn thành mốc nào trong lộ trình.
-- Không có xác minh năm học, không có gate sinh viên năm cuối: mọi năm học hoặc bỏ trống đều dùng được.
+- **Điểm CV review là điểm chất lượng tài liệu**, không phải điểm năng lực và không phải điểm sẵn
+  sàng nghề nghiệp. Giao diện ghi rõ ngay cạnh con số.
+- **Tiến độ do người dùng tự xác nhận.** AI không tự tick.
+- **Hồ sơ im lặng ≠ không có kỹ năng.** Hệ thống phân biệt `HAS_EVIDENCE` / `LIMITED_EVIDENCE` /
+  `NO_DATA` và không bao giờ kết luận người dùng không làm được điều mà hồ sơ chỉ đơn giản là
+  không nhắc tới.
+- **RAG tăng khả năng truy vết, không bảo đảm câu trả lời đúng.**
+- **Lộ trình không hứa việc làm.** Khi mục tiêu không vừa quỹ thời gian, hệ thống ghi
+  `TIGHT` hoặc `NOT_ACHIEVABLE`, nêu rõ phần bị bỏ ra ngoài, và lập lộ trình cho phần vừa được.
+- Quan hệ học trước–học sau giữa các công nghệ hầu hết là **đề xuất của AI**, được đánh dấu
+  `AI_SUGGESTED` và vẽ bằng nét đứt trên đồ thị. SFIA không phải nguồn cho loại quan hệ này.
 
 ---
 
-## 🔄 Lưu trữ, reset và vòng đời dữ liệu
+## 🚀 Chạy dự án
 
-Bài đánh giá cùng lộ trình được lưu thành **snapshot** trong hàng hồ sơ, kèm `roadmapId` và id từng
-mốc do **server** cấp (UUID). Nhờ vậy id không đổi qua reload, qua xoá cache và qua restart backend —
-tiến độ đã tick vẫn trỏ đúng chỗ.
+### Yêu cầu
 
-| Thao tác | Snapshot / tiến độ | Chat |
-|---|---|---|
-| Sửa hồ sơ (có thay đổi thật) | Reset, sinh lại lộ trình mới | Reset |
-| Bấm Save mà không đổi gì | **Giữ nguyên** (`updatedAt` không đổi) | Giữ |
-| Tải CV lên / đổi sample | Reset, bỏ CV và dữ liệu người trước | Reset |
-| Tick / untick mốc | Chỉ đổi danh sách đã hoàn thành | Giữ |
-| Đổi tab | Giữ | Giữ |
-| Reload trang | Giữ (đọc lại từ DB) | Bắt đầu chat mới |
-| Restart backend | Giữ | Không lưu chat ở server |
+- **JDK 21** (pom và Dockerfile đặt `java.version=21`)
+- Node.js 20+
+- MySQL/PostgreSQL, hoặc dùng profile `local` với H2 (không cần cài gì thêm)
 
-Nút **Reload analysis** chỉ tải lại snapshot, **không** sinh lại phân tích. Muốn có phân tích mới,
-hãy sửa hồ sơ thật sự.
-
-### ⚠️ Thay đổi schema
-
-Bản này **thêm cột** vào `user_profiles`: `year_of_study`, `learning_snapshot_json`,
-`learning_snapshot_version`, `learning_snapshot_profile_key`, `completed_milestones`.
-Cấu hình hiện tại dùng `spring.jpa.hibernate.ddl-auto: update` nên Hibernate tự thêm cột khi khởi
-động. Môi trường nào không dùng chế độ đó cần migration tương ứng. Hàng dữ liệu cũ có cột null đọc
-như "chưa có snapshot / chưa có tiến độ" — **không cần xoá database để nâng cấp**.
-
----
-
-## ⚙️ Cấu hình Gemini (quan trọng)
-
-| Biến môi trường | Mặc định | Ghi chú |
-|---|---|---|
-| `GEMINI_API_KEY` | *(bắt buộc)* | Lấy tại [Google AI Studio](https://aistudio.google.com/apikey). Chỉ đặt trong biến môi trường, **không commit vào repo**. |
-| `GEMINI_MODEL` | `gemini-flash-lite-latest` | Model chính. |
-| `THE_MUSE_API_KEY` | *(không bắt buộc)* | The Muse trả **403** cho IP datacenter của Render. Lấy key miễn phí tại [themuse.com/developers](https://www.themuse.com/developers/api/v2) để dùng lại nguồn này; không có key thì 5 nguồn còn lại vẫn chạy bình thường. |
-| `GEMINI_FALLBACK_MODELS` | `gemini-3.1-flash-lite,gemini-flash-latest,gemini-3.5-flash,gemini-2.5-flash` | Danh sách dự phòng, thử lần lượt khi model chính bị 429 (hết quota) hoặc 404. |
-
-> ⚠️ **Lưu ý về quota:** `gemini-3.5-flash` ở gói miễn phí chỉ cho **20 request/ngày/project**. Khi hết,
-> mọi tính năng AI sẽ rơi về nội dung dự phòng. Vì vậy model mặc định là bản `flash-lite` có hạn mức
-> lớn hơn nhiều, kèm cơ chế tự chuyển model khi gặp lỗi quota.
-
-### Kiểm tra AI có thật sự hoạt động không
+### Backend
 
 ```bash
-curl "https://<backend-url>/api/coach/ai-status?probe=true"
+cd backend
+./mvnw spring-boot:run -Dspring-boot.run.profiles=local
 ```
 
-Kết quả trả về `reachable`, `lastWorkingModel` và `lastError` — đủ để biết ngay AI đang trả lời thật
-hay đang chạy dự phòng, và vì sao.
-
----
-
-## 💻 Chạy ở máy local
-
-### Cách 1 — không cần Docker (nhanh nhất)
-
-Dùng profile `local` với cơ sở dữ liệu H2 ghi ra file:
-
-```bash
-cd backend && GEMINI_API_KEY=your_key ./mvnw spring-boot:run -Dspring-boot.run.profiles=local
-```
-
-### Cách 2 — dùng MySQL qua Docker
-
-```bash
-docker-compose up -d
-```
-
-```bash
-cd backend && GEMINI_API_KEY=your_key ./mvnw spring-boot:run
-```
+> Máy chỉ có JDK 17 vẫn build và chạy được — mã nguồn không dùng tính năng nào của Java 21 —
+> bằng cách thêm `-Djava.version=17` vào lệnh Maven. Đây là cách bản cập nhật này được kiểm thử
+> trên máy dev; deployment vẫn dùng JDK 21 theo Dockerfile.
 
 ### Frontend
 
@@ -133,61 +253,58 @@ cd backend && GEMINI_API_KEY=your_key ./mvnw spring-boot:run
 cd frontend && npm install && npm run dev
 ```
 
-Nếu backend chạy ở cổng khác `8080`, tạo `frontend/.env.local`:
+Vite proxy `/api` sang `http://localhost:8080`.
 
-```bash
-echo "VITE_API_BASE=http://localhost:8099/api" > frontend/.env.local
-```
-
----
-
-## ☁️ Ghi chú khi deploy lên Render (gói Free)
-
-- Render **tắt instance sau 15 phút không dùng**; lần truy cập kế tiếp mất khoảng 50–60 giây để khởi
-  động lại. Frontend xử lý việc này bằng cách chờ tối đa 90 giây, hiển thị trạng thái "đang khởi
-  động" thay vì báo lỗi, đồng thời ping `/api/health` mỗi 10 phút để giữ instance luôn thức khi người
-  dùng đang mở web.
-- `healthCheckPath: /api/health` giúp Render đánh dấu service sẵn sàng ngay khi tầng web trả lời, không
-  phải chờ database.
-- Việc đồng bộ tin tuyển dụng lúc khởi động chạy **bất đồng bộ**, nên không làm chậm thời gian khởi động.
-- Kết quả đánh giá CV và lộ trình được **lưu snapshot theo phiên bản hồ sơ** trong database (cache RAM
-  chỉ là lớp tối ưu phía trước), vừa tiết kiệm quota AI vừa giúp chuyển tab và restart không làm mất
-  id mốc lộ trình.
-
----
-
-## 🔌 API chính
-
-| Method | Endpoint | Mô tả |
-|---|---|---|
-| `GET` | `/api/health` | Kiểm tra sống (không chạm database) |
-| `GET` | `/api/coach/ai-status?probe=true` | Chẩn đoán kết nối Gemini |
-| `POST` | `/api/profiles/upload-cv` | Tải CV lên và phân tích |
-| `GET` | `/api/profiles/current` | Hồ sơ hiện tại (kèm `completedMilestones`, `roadmapId` — chỉ đọc) |
-| `POST` | `/api/profiles/reset-sample/{type}` | Nạp hồ sơ mẫu: `student-year-2` hoặc `student-year-4` |
-| `PATCH` | `/api/profiles/current/milestones/{milestoneId}` | Tự đánh dấu một mốc (`{ "roadmapId": "...", "completed": true }`). Không đổi `updatedAt`, không gọi AI. 409 nếu lộ trình đã cũ, 404 nếu mốc không thuộc lộ trình hiện tại |
-| `GET` | `/api/jobs` | Danh sách việc làm (lọc theo từ khoá, khu vực, hình thức, visa) |
-| `GET` | `/api/jobs/source-status` | Kiểm tra từng nguồn việc làm có bị chặn không |
-| `POST` | `/api/jobs/sync-external` | Đồng bộ tin tuyển dụng từ 6 nguồn |
-| `GET` | `/api/matches` | Điểm phù hợp cho hồ sơ hiện tại |
-| `GET` | `/api/matches/{id}/ai-deep-dive` | Phân tích chuyên sâu một vị trí |
-| `GET` | `/api/coach/audit` | Đánh giá hồ sơ + lộ trình (đọc snapshot; sinh mới ở lần gọi đầu) |
-| `GET` | `/api/coach/roadmap` | Lộ trình 12 tháng — **cùng snapshot, cùng id** với `/audit` |
-| `POST` | `/api/coach/chat` | Chat và luyện tập với coach |
-
----
-
-## 🧪 Kiểm thử
+### Kiểm thử
 
 ```bash
 cd backend && ./mvnw test
 ```
 
-24 test chạy trên H2 in-memory, không gọi Gemini thật (không cấu hình API key trong test → đi đường
-offline, kết quả tất định). Phạm vi: vòng đời `yearOfStudy`, no-op save vs. reset, snapshot tái dùng
-sau khi service khởi tạo lại, `/audit` và `/roadmap` trùng id, tick/untick idempotent không đổi
-`updatedAt` và không gọi model, chặn ghi đè khi hồ sơ đã đổi, và lộ trình offline luôn có AI_FLUENCY.
-
 ```bash
-cd frontend && npm run build && npm run lint
+cd frontend && npm run lint && npm run build
 ```
+
+---
+
+## 🔌 API
+
+| Endpoint | Mô tả |
+|---|---|
+| `GET /api/profiles/current` | Hồ sơ + mục tiêu hiện tại |
+| `POST /api/profiles` | Lưu hồ sơ và/hoặc mục tiêu |
+| `POST /api/profiles/upload-cv` | Tải CV, trích xuất bằng AI (503 khi AI không khả dụng) |
+| `POST /api/profiles/reset-sample/{student-early\|student-final}` | Hồ sơ mẫu để demo |
+| `GET /api/plan` | Lộ trình đã lưu, hoặc `plan: null` kèm `missingInputs` |
+| `POST /api/plan/generate` | **Chạy pipeline.** 503 khi AI hỏng, 502 khi AI không sửa được kết quả |
+| `PATCH /api/plan/progress/{itemId}` | Tick một giai đoạn / hoạt động / tiêu chí |
+| `GET /api/plan/data-status` | Taxonomy, kho tài liệu và cấu hình model đang có |
+| `POST /api/plan/data-status/reload` | Nạp lại SFIA và các catalogue từ đĩa |
+| `POST /api/plan/data-status/verify-urls` | Kiểm tra link toàn bộ catalogue |
+| `POST /api/coach/chat` | Panel hỏi đáp về lộ trình |
+| `GET /api/coach/ai-status?probe=true` | Một round trip thật tới Gemini |
+
+Đọc và sinh là hai endpoint tách biệt. Sinh lộ trình tốn 4 lần gọi model và gần một phút; để việc
+mở trang tự kích hoạt nó nghĩa là tiêu quota theo ngày cho người chỉ muốn xem lại thứ đã có.
+
+---
+
+## 🔒 Bảo mật và dữ liệu cá nhân
+
+- API key chỉ đi trong header `x-goog-api-key`, không bao giờ nằm trong URL hay access log.
+- Nội dung CV **không bao giờ** được ghi log — kể cả khi parse lỗi, chỉ log tên loại exception.
+- CV, JD và tài liệu truy xuất được đưa vào prompt trong khối có rào và được giới thiệu là **dữ
+  liệu, không phải chỉ dẫn**. Kèm theo đó, mọi câu trả lời đều bị validate lại theo dữ liệu đã truy
+  xuất — đó mới là lớp phòng vệ thật, vì rào prompt một mình không đủ.
+
+---
+
+## ❌ Đã gỡ khỏi bản này
+
+- **Job Matching** và toàn bộ deep-dive, đồng bộ 6 job board, filter, `THE_MUSE_API_KEY`.
+- **Practice mode** trong chat (ra đề, chấm 0–6).
+- **Year of study** — thay bằng cấp độ mục tiêu, thứ quyết định trực tiếp mức yêu cầu của từng kỹ năng.
+- **Mọi nhánh fallback viết sẵn**: audit heuristic, roadmap heuristic, từ điển kỹ năng cho CV, câu
+  trả lời chat offline.
+
+Dữ liệu cũ trong database không bị xoá.

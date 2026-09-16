@@ -7,6 +7,14 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 
+/**
+ * The student's profile, their career goal, and the plan generated from the two.
+ *
+ * <p>Columns from the job-matching feature - target locations, relocation preference, work type -
+ * and the year-of-study field are no longer mapped. Removing a field from an entity does not drop
+ * a column under {@code ddl-auto: update}, so existing rows keep their data and can be read by
+ * anything that still wants it; the application simply stops using them.
+ */
 @Entity
 @Table(name = "user_profiles")
 public class UserProfile {
@@ -22,13 +30,6 @@ public class UserProfile {
     private String industry; // e.g. "Semiconductor / IC Design", "Finance & Accounting"
     private Double yearsOfExperience;
 
-    /**
-     * Canonical values only: "Year 1" ... "Year 5+", or null when it is not known.
-     * Nullable on purpose - the product serves students of every year and people who are not
-     * students at all, so an unknown year stays unknown rather than being guessed.
-     */
-    private String yearOfStudy;
-
     @Column(columnDefinition = "TEXT")
     private String bio;
 
@@ -40,38 +41,60 @@ public class UserProfile {
     @Column(columnDefinition = "TEXT")
     private String languages; // e.g. "English (Fluent), Vietnamese (Native)"
 
+    /** Roles the CV names as an objective. Offered as suggestions for the goal below. */
     @Column(columnDefinition = "TEXT")
-    private String targetRoles; // e.g. "Backend Engineer, Cloud Architect"
-
-    @Column(columnDefinition = "TEXT")
-    private String targetLocations; // e.g. "Vietnam, Singapore, Remote Worldwide, Germany"
-
-    private Boolean willingToRelocate = false;
-    private String targetWorkType = "ANY"; // ANY, REMOTE, HYBRID, ONSITE
+    private String targetRoles;
 
     @Column(columnDefinition = "TEXT")
     private String rawCvText;
 
     // ------------------------------------------------------------------
-    // Learning snapshot and self-reported progress.
+    // Career goal.
     //
-    // The audit and its embedded roadmap are stored here so milestone ids survive a reload, a
-    // cache eviction and a backend restart. Without a stored snapshot the roadmap was regenerated
-    // whenever the in-memory cache lost it, and every previously ticked milestone pointed at an
-    // id that no longer existed.
+    // Stored on the profile rather than passed per request because a plan is only meaningful
+    // against the goal it was built for. Keeping the goal here lets a reload reproduce exactly
+    // which question the stored plan answers, and lets the snapshot key notice when it changes.
     // ------------------------------------------------------------------
 
-    /** Serialised {@code ResumeAuditDto}, roadmap included. Never exposed through ProfileDto. */
+    private String targetRole;
+
+    /** INTERN, JUNIOR, MID or SENIOR. */
+    private String targetSeniority;
+
+    /** A job advert the student pasted. Data for the analysis, never treated as instructions. */
+    @Column(columnDefinition = "TEXT")
+    private String targetJobDescription;
+
+    /** 1, 3 or 6. */
+    private Integer planDurationMonths;
+
+    private Integer planHoursPerWeek;
+
+    // ------------------------------------------------------------------
+    // Generated plan and self-reported progress.
+    //
+    // Stored so phase and activity ids survive a reload, a cache eviction and a restart. Without
+    // it the plan was regenerated whenever memory lost it, and every tick pointed at an id that
+    // no longer existed.
+    // ------------------------------------------------------------------
+
+    /** Serialised {@code LearningPlanDto}. Never exposed through ProfileDto. */
     @Column(columnDefinition = "TEXT")
     private String learningSnapshotJson;
 
-    /** Serialisation / prompt contract version, so an incompatible old snapshot can be discarded. */
+    /** Pipeline / storage contract version, so an incompatible older plan can be discarded. */
     private Integer learningSnapshotVersion;
 
-    /** The profile revision ({@code id@updatedAt}) the snapshot was generated from. */
+    /** The profile revision ({@code id@updatedAt}) the plan was generated from. */
     private String learningSnapshotProfileKey;
 
-    /** JSON array of milestone ids the user self-reported as done. Null reads as an empty list. */
+    /**
+     * The goal the plan was generated for. A plan for a three-month backend path is not an answer
+     * to a six-month data path, so a changed goal invalidates it exactly as a changed CV does.
+     */
+    private String learningSnapshotGoalKey;
+
+    /** JSON array of checkable ids the user self-reported as done. Null reads as an empty list. */
     @Column(columnDefinition = "TEXT")
     private String completedMilestones;
 
@@ -90,10 +113,10 @@ public class UserProfile {
     }
 
     // There is deliberately no @PreUpdate hook. updatedAt is the profile revision that invalidates
-    // the learning snapshot, the AI caches and the chat session, so it must change only when the
-    // profile content really changes. A lifecycle hook would also bump it when the only thing
-    // written was a ticked checkbox, silently discarding the roadmap that tick belonged to.
-    // ProfileService sets updatedAt explicitly on the paths that are real content edits.
+    // the stored plan and the chat session, so it must change only when the profile content really
+    // changes. A lifecycle hook would also bump it when the only thing written was a ticked
+    // checkbox, silently discarding the plan that tick belonged to. ProfileService sets updatedAt
+    // explicitly on the paths that are real content edits.
 
     public List<String> getSkillList() {
         if (skills == null || skills.isBlank()) {
@@ -111,16 +134,6 @@ public class UserProfile {
         } else {
             this.skills = String.join(", ", list);
         }
-    }
-
-    public List<String> getTargetLocationList() {
-        if (targetLocations == null || targetLocations.isBlank()) {
-            return new ArrayList<>();
-        }
-        return Arrays.stream(targetLocations.split(","))
-                .map(String::trim)
-                .filter(s -> !s.isEmpty())
-                .collect(Collectors.toList());
     }
 
     public List<String> getTargetRoleList() {
@@ -222,30 +235,6 @@ public class UserProfile {
         this.targetRoles = targetRoles;
     }
 
-    public String getTargetLocations() {
-        return targetLocations;
-    }
-
-    public void setTargetLocations(String targetLocations) {
-        this.targetLocations = targetLocations;
-    }
-
-    public Boolean getWillingToRelocate() {
-        return willingToRelocate;
-    }
-
-    public void setWillingToRelocate(Boolean willingToRelocate) {
-        this.willingToRelocate = willingToRelocate;
-    }
-
-    public String getTargetWorkType() {
-        return targetWorkType;
-    }
-
-    public void setTargetWorkType(String targetWorkType) {
-        this.targetWorkType = targetWorkType;
-    }
-
     public String getIndustry() {
         return industry;
     }
@@ -254,12 +243,44 @@ public class UserProfile {
         this.industry = industry;
     }
 
-    public String getYearOfStudy() {
-        return yearOfStudy;
+    public String getTargetRole() {
+        return targetRole;
     }
 
-    public void setYearOfStudy(String yearOfStudy) {
-        this.yearOfStudy = yearOfStudy;
+    public void setTargetRole(String targetRole) {
+        this.targetRole = targetRole;
+    }
+
+    public String getTargetSeniority() {
+        return targetSeniority;
+    }
+
+    public void setTargetSeniority(String targetSeniority) {
+        this.targetSeniority = targetSeniority;
+    }
+
+    public String getTargetJobDescription() {
+        return targetJobDescription;
+    }
+
+    public void setTargetJobDescription(String targetJobDescription) {
+        this.targetJobDescription = targetJobDescription;
+    }
+
+    public Integer getPlanDurationMonths() {
+        return planDurationMonths;
+    }
+
+    public void setPlanDurationMonths(Integer planDurationMonths) {
+        this.planDurationMonths = planDurationMonths;
+    }
+
+    public Integer getPlanHoursPerWeek() {
+        return planHoursPerWeek;
+    }
+
+    public void setPlanHoursPerWeek(Integer planHoursPerWeek) {
+        this.planHoursPerWeek = planHoursPerWeek;
     }
 
     public String getLearningSnapshotJson() {
@@ -284,6 +305,14 @@ public class UserProfile {
 
     public void setLearningSnapshotProfileKey(String learningSnapshotProfileKey) {
         this.learningSnapshotProfileKey = learningSnapshotProfileKey;
+    }
+
+    public String getLearningSnapshotGoalKey() {
+        return learningSnapshotGoalKey;
+    }
+
+    public void setLearningSnapshotGoalKey(String learningSnapshotGoalKey) {
+        this.learningSnapshotGoalKey = learningSnapshotGoalKey;
     }
 
     public String getCompletedMilestones() {

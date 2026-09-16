@@ -58,62 +58,6 @@
   letter-spacing: 0.5px;
 }
 
-.nav-tabs {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  background: var(--bg-secondary);
-  padding: 0.3rem;
-  border-radius: 12px;
-  border: 1px solid var(--border-color);
-}
-
-.nav-tab-btn {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.55rem 1.1rem;
-  border-radius: 8px;
-  border: none;
-  background: transparent;
-  color: var(--text-secondary);
-  font-size: 0.875rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.nav-tab-btn:hover {
-  color: var(--text-primary);
-  background: var(--surface-subtle);
-}
-
-.nav-tab-btn.active {
-  background: var(--accent-primary);
-  color: #ffffff;
-  box-shadow: 0 2px 12px rgba(99, 102, 241, 0.35);
-}
-
-.system-status {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.8rem;
-  color: var(--accent-success);
-  background: rgba(16, 185, 129, 0.1);
-  padding: 0.4rem 0.85rem;
-  border-radius: 9999px;
-  border: 1px solid rgba(16, 185, 129, 0.2);
-}
-
-.status-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--accent-success);
-  box-shadow: 0 0 8px var(--accent-success);
-}
-
 /* Page Content */
 .main-content {
   flex: 1;
@@ -353,19 +297,6 @@ textarea.form-control {
   color: var(--accent-danger);
 }
 
-/* Match Score Badge */
-.match-score-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.3rem;
-  padding: 0.4rem 0.8rem;
-  border-radius: 12px;
-  font-weight: 800;
-  font-size: 1.05rem;
-  letter-spacing: -0.5px;
-}
-
 .score-high {
   background: rgba(16, 185, 129, 0.15);
   color: var(--accent-emerald);
@@ -384,244 +315,6 @@ textarea.form-control {
   background: rgba(148, 163, 184, 0.15);
   color: var(--text-secondary);
   border: 1px solid rgba(148, 163, 184, 0.3);
-}
-
-/* Job Card */
-.job-card {
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  border-radius: 16px;
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  padding: 1.5rem;
-  transition: all 0.25s ease;
-  position: relative;
-  overflow: hidden;
-}
-
-.job-card:hover {
-  transform: translateY(-3px);
-  border-color: var(--border-active);
-  box-shadow: var(--shadow-md);
-  background: var(--bg-card-hover);
-}
-
-.job-card-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 1rem;
-}
-
-.company-avatar {
-  width: 44px;
-  height: 44px;
-  border-radius: 10px;
-  /* Logos are artwork, not photos: never crop them, and sit them on a light plate. Most company
-     logos are white or transparent PNGs, which were invisible against the dark card. */
-  object-fit: contain;
-  background: #ffffff;
-  padding: 4px;
-  border: 1px solid var(--border-active);
-  flex-shrink: 0;
-}
-
-.job-title {
-  font-size: 1.1rem;
-  font-weight: 700;
-  color: var(--text-primary)fff;
-  margin-bottom: 0.25rem;
-  line-height: 1.35;
-}
-
-.job-company {
-  font-size: 0.85rem;
-  color: var(--text-secondary);
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-}
-
-.job-meta-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.75rem;
-  margin: 0.85rem 0;
-  font-size: 0.825rem;
-  color: var(--text-secondary);
-}
-
-.job-meta-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-}
-
-.visa-badge {
-  background: rgba(99, 102, 241, 0.12);
-  color: var(--accent-soft);
-  border: 1px solid rgba(99, 102, 241, 0.3);
-  padding: 0.2rem 0.6rem;
-  border-radius: 6px;
-  font-size: 0.75rem;
-  font-weight: 600;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-}
-
-/* Filter Controls */
-.filter-panel {
-  margin-bottom: 1.75rem;
-  padding: 1rem 1.25rem;
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: 14px;
-}
-
-.filter-panel-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 1rem;
-}
-
-.filter-search {
-  display: flex;
-  gap: 0.5rem;
-  flex: 1;
-  min-width: 260px;
-  max-width: 380px;
-  position: relative;
-}
-
-.filter-search-icon {
-  position: absolute;
-  left: 12px;
-  top: 50%;
-  transform: translateY(-50%);
-  color: var(--text-muted);
-  pointer-events: none;
-}
-
-.filter-search-input {
-  padding-left: 36px;
-  width: 100%;
-}
-
-/* Disclosure for preferences that are set once and then left alone, keeping the
-   default view to just search and scope. */
-.filter-disclosure {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin-top: 0.9rem;
-  padding: 0.5rem 0.2rem 0;
-  border: none;
-  border-top: 1px solid var(--border-color);
-  background: none;
-  color: var(--text-secondary);
-  font-family: inherit;
-  font-size: 0.82rem;
-  font-weight: 600;
-  cursor: pointer;
-  width: 100%;
-  transition: color 0.2s ease;
-}
-
-.filter-disclosure:hover {
-  color: var(--text-primary);
-}
-
-.filter-count {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 5px;
-  border-radius: 9999px;
-  background: var(--accent-primary);
-  color: #fff;
-  font-size: 0.68rem;
-  font-weight: 700;
-}
-
-.filter-chevron {
-  margin-left: auto;
-  font-size: 1.1rem;
-  line-height: 1;
-  transition: transform 0.2s ease;
-}
-
-.filter-chevron.open {
-  transform: rotate(90deg);
-}
-
-.filter-advanced {
-  display: grid;
-  grid-template-columns: minmax(180px, 220px) minmax(240px, 1fr);
-  gap: 1rem 1.25rem;
-  margin-top: 0.9rem;
-  padding-top: 0.9rem;
-  border-top: 1px solid var(--border-color);
-}
-
-.filter-field {
-  min-width: 0;
-}
-
-.filter-inline-input {
-  display: flex;
-  gap: 0.5rem;
-}
-
-.filter-toggle {
-  grid-column: 1 / -1;
-  display: flex;
-  align-items: flex-start;
-  gap: 0.7rem;
-  padding: 0.7rem 0.85rem;
-  border: 1px solid var(--border-color);
-  border-radius: 10px;
-  background: var(--surface-subtle);
-  cursor: pointer;
-}
-
-.filter-toggle input {
-  margin-top: 0.15rem;
-  width: 17px;
-  height: 17px;
-  accent-color: var(--accent-primary);
-  flex-shrink: 0;
-}
-
-.filter-toggle strong {
-  display: block;
-  font-size: 0.86rem;
-  color: var(--text-primary);
-}
-
-.filter-toggle em {
-  display: block;
-  margin-top: 0.15rem;
-  font-style: normal;
-  font-size: 0.775rem;
-  color: var(--text-secondary);
-}
-
-@media (max-width: 640px) {
-  .filter-advanced {
-    grid-template-columns: 1fr;
-  }
-
-  .filter-search {
-    max-width: none;
-  }
 }
 
 /* Theme switch in the header. */
@@ -643,36 +336,6 @@ textarea.form-control {
 .theme-toggle:hover {
   color: var(--text-primary);
   border-color: var(--border-active);
-}
-
-.filter-pills {
-  display: flex;
-  align-items: center;
-  gap: 0.45rem;
-  flex-wrap: wrap;
-}
-
-.filter-pill {
-  padding: 0.45rem 0.95rem;
-  border-radius: 9999px;
-  border: 1px solid var(--border-color);
-  background: transparent;
-  color: var(--text-secondary);
-  font-size: 0.825rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.filter-pill:hover {
-  color: var(--text-primary);
-  border-color: var(--border-active);
-}
-
-.filter-pill.active {
-  background: rgba(99, 102, 241, 0.15);
-  border-color: var(--accent-primary);
-  color: var(--accent-soft);
 }
 
 /* Modal Drawer */
@@ -973,31 +636,6 @@ textarea.form-control {
     width: 100%;
   }
 
-  .system-status {
-    display: none;
-  }
-
-  .nav-tabs {
-    width: 100%;
-    overflow-x: auto;
-    white-space: nowrap;
-    display: flex;
-    gap: 0.35rem;
-    padding: 0.3rem;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-  }
-
-  .nav-tabs::-webkit-scrollbar {
-    display: none;
-  }
-
-  .nav-tab-btn {
-    flex-shrink: 0;
-    padding: 0.45rem 0.8rem;
-    font-size: 0.8rem;
-  }
-
   .main-content {
     padding: 1rem 0.75rem;
   }
@@ -1021,25 +659,6 @@ textarea.form-control {
     flex-direction: column;
     align-items: stretch;
     gap: 0.75rem;
-  }
-
-  .filter-pills {
-    width: 100%;
-    overflow-x: auto;
-    white-space: nowrap;
-    padding-bottom: 0.35rem;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-  }
-
-  .filter-pills::-webkit-scrollbar {
-    display: none;
-  }
-
-  .filter-pill {
-    flex-shrink: 0;
-    font-size: 0.78rem;
-    padding: 0.35rem 0.7rem;
   }
 
   .filter-bar form {
@@ -1114,17 +733,9 @@ textarea.form-control {
     font-size: 1.1rem;
   }
 
-  .nav-tab-btn span {
-    font-size: 0.75rem;
-  }
-
   .btn {
     font-size: 0.8rem;
     padding: 0.55rem 1rem;
-  }
-
-  .job-card {
-    padding: 1.15rem;
   }
 }
 
@@ -1333,17 +944,4 @@ textarea.form-control {
     animation-duration: 0.01ms;
     animation-iteration-count: 1;
   }
-}
-
-/* Generated fallback avatar for employers whose logo is missing or fails to load. */
-.company-avatar-fallback {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 700;
-  color: #fff;
-  letter-spacing: 0.02em;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  flex-shrink: 0;
-  user-select: none;
 }

@@ -3,6 +3,7 @@ package com.gbhackathon.AICareerCode.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.gbhackathon.AICareerCode.dto.ProfileDto;
+import com.gbhackathon.AICareerCode.dto.plan.CareerGoalDto;
 import com.gbhackathon.AICareerCode.model.UserProfile;
 import com.gbhackathon.AICareerCode.repository.UserProfileRepository;
 import org.slf4j.Logger;
@@ -16,6 +17,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -25,13 +27,18 @@ public class ProfileService {
 
     private static final Logger log = LoggerFactory.getLogger(ProfileService.class);
 
+    /** The only seniority values a goal may carry; each one changes every required skill level. */
+    public static final List<String> SENIORITY_VALUES = List.of("INTERN", "JUNIOR", "MID", "SENIOR");
+
+    /** The only plan lengths offered. A free-text number would produce plans nobody can compare. */
+    public static final List<Integer> DURATION_MONTHS_VALUES = List.of(1, 3, 6);
+
     /**
-     * The only values {@code yearOfStudy} may hold. A free-text year would break the roadmap
-     * prompt, which branches on the study stage, so anything outside this list is rejected rather
-     * than stored and silently ignored later.
+     * Upper bound on the weekly study budget. Not a judgement about how hard anyone works: a plan
+     * generated against 80 hours a week is a plan for a situation that will not hold, and the
+     * hours it promises are the one number a student will actually rely on.
      */
-    public static final List<String> YEAR_OF_STUDY_VALUES =
-            List.of("Year 1", "Year 2", "Year 3", "Year 4", "Year 5+");
+    public static final int MAX_HOURS_PER_WEEK = 40;
 
     private final UserProfileRepository profileRepository;
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -48,7 +55,7 @@ public class ProfileService {
         return profileRepository.findById(id);
     }
 
-    /** Revision string used as the cache and snapshot key. Changes only when content changes. */
+    /** Revision string used as part of the snapshot key. Changes only when content changes. */
     public static String profileKey(UserProfile profile) {
         return profile.getId() + "@"
                 + (profile.getUpdatedAt() != null ? profile.getUpdatedAt().toString() : "new");
@@ -63,14 +70,15 @@ public class ProfileService {
                 for (int i = 1; i < list.size(); i++) {
                     try {
                         profileRepository.delete(list.get(i));
-                    } catch (Exception ignored) {}
+                    } catch (Exception ignored) {
+                        // A row that cannot be removed is harmless; only the newest is ever served.
+                    }
                 }
             }
             return latest;
         }
-        // A blank onboarding profile. The old default described a backend engineer with three years
-        // of experience and senior-role goals, which is advice-shaping fiction for a first-year
-        // student: the audit and roadmap were generated from a person who did not exist.
+        // A blank onboarding profile. An invented default profile would be analysed as though it
+        // described the person sitting in front of it, producing a plan for someone who does not exist.
         UserProfile p = new UserProfile();
         p.setFullName("");
         p.setEmail("");
@@ -82,11 +90,7 @@ public class ProfileService {
         p.setLanguages("");
         p.setSkills("");
         p.setTargetRoles("");
-        p.setTargetLocations("");
-        p.setWillingToRelocate(false);
-        p.setTargetWorkType("ANY");
         p.setBio("");
-        p.setYearOfStudy(null);
         p.setCreatedAt(LocalDateTime.now());
         p.setUpdatedAt(LocalDateTime.now());
         return profileRepository.save(p);
@@ -97,45 +101,48 @@ public class ProfileService {
     // ---------------------------------------------------------------------
 
     /**
-     * Applies an edit from the profile form.
+     * Applies an edit from the input panel.
      *
-     * <p>Fields absent from the request keep their stored value, which is what the form needs when
-     * it posts a partial object. Two behaviours matter beyond that:
+     * <p>Fields absent from the request keep their stored value, which is what a partial form post
+     * needs. Beyond that:
      *
      * <ul>
      *   <li>A save that changes nothing after normalisation is a no-op: {@code updatedAt} does not
-     *       move and the learning snapshot and progress survive. Pressing Save twice used to throw
-     *       away a roadmap the user had been ticking through.</li>
-     *   <li>A save that does change something resets the snapshot and the progress, because the
-     *       advice was generated from the old profile and the milestone ids belong to it.</li>
+     *       move and the stored plan and progress survive. Pressing Save twice used to throw away a
+     *       plan the student was working through.</li>
+     *   <li>A change to the PROFILE resets the plan, because the analysis was generated from the
+     *       old profile and the phase ids belong to it.</li>
+     *   <li>A change to the GOAL alone does not reset anything here. The stored plan simply stops
+     *       matching the goal key and is no longer served - which means switching back to the
+     *       previous goal still finds the plan that was built for it.</li>
      * </ul>
-     *
-     * <p>{@code completedMilestones} and {@code roadmapId} on the incoming DTO are ignored here on
-     * purpose; progress moves only through the dedicated milestone endpoint.
      */
     @Transactional
     public UserProfile saveOrUpdateProfile(ProfileDto dto) {
         UserProfile profile = getCurrentOrCreateProfile();
-        boolean changed = applyEditableFields(profile, dto);
+        boolean profileChanged = applyEditableFields(profile, dto);
+        boolean goalChanged = applyGoalFields(profile, dto);
 
-        if (!changed) {
+        if (!profileChanged && !goalChanged) {
             log.debug("Profile save was a no-op; keeping revision {}", profileKey(profile));
             return profile;
         }
 
-        clearLearningState(profile);
-        profile.setUpdatedAt(nextRevisionTimestamp(profile.getUpdatedAt()));
+        if (profileChanged) {
+            clearLearningState(profile);
+            profile.setUpdatedAt(nextRevisionTimestamp(profile.getUpdatedAt()));
+        }
         return profileRepository.save(profile);
     }
 
     /**
      * The next revision timestamp, guaranteed to be strictly later than the previous one.
      *
-     * <p>updatedAt is not decoration here, it is the key that decides whether a stored analysis
-     * still belongs to this profile. Two edits inside the same clock tick would produce the same
-     * key, and the second edit would then be served the first edit's roadmap. Timestamps are also
-     * truncated to microseconds because that is what the database columns keep, so the value read
-     * back matches the value that was compared against.
+     * <p>updatedAt is not decoration, it is the key that decides whether a stored plan still
+     * belongs to this profile. Two edits inside the same clock tick would produce the same key and
+     * the second edit would be served the first edit's plan. Timestamps are truncated to
+     * microseconds because that is what the database columns keep, so the value read back matches
+     * the value that was compared against.
      */
     private static LocalDateTime nextRevisionTimestamp(LocalDateTime previous) {
         LocalDateTime now = LocalDateTime.now().truncatedTo(ChronoUnit.MICROS);
@@ -151,9 +158,11 @@ public class ProfileService {
      *
      * <p>{@link #saveOrUpdateProfile} merges field by field, which is right for manual edits but
      * wrong here: uploading a semiconductor CV over a previous software profile would keep the old
-     * skills, industry and target roles wherever the new CV had nothing to say. A CV upload
-     * describes a whole person, so every extracted field is written, including the empty ones —
-     * including {@code yearOfStudy}, which falls back to null when the CV does not state a year.
+     * skills, industry and target roles wherever the new CV had nothing to say. A CV describes a
+     * whole person, so every extracted field is written, including the empty ones.
+     *
+     * <p>The goal is deliberately preserved. A student who has already said they are aiming at a
+     * junior backend role in three months has not changed their mind by uploading a better CV.
      */
     @Transactional
     public UserProfile replaceProfileFromCv(ProfileDto dto) {
@@ -166,7 +175,16 @@ public class ProfileService {
      */
     @Transactional
     public UserProfile replaceProfileFromSample(ProfileDto dto) {
-        return replaceProfile(dto, null);
+        UserProfile saved = replaceProfile(dto, null);
+        // A sample carries its own goal so the demo can be generated in one click.
+        if (dto.getTargetRole() != null) {
+            saved.setTargetRole(dto.getTargetRole());
+            saved.setTargetSeniority(normalizeSeniority(dto.getTargetSeniority()));
+            saved.setPlanDurationMonths(normalizeDuration(dto.getPlanDurationMonths()));
+            saved.setPlanHoursPerWeek(normalizeHoursPerWeek(dto.getPlanHoursPerWeek()));
+            saved = profileRepository.save(saved);
+        }
+        return saved;
     }
 
     private UserProfile replaceProfile(ProfileDto dto, String rawCvText) {
@@ -177,16 +195,12 @@ public class ProfileService {
         profile.setPhone(dto.getPhone());
         profile.setCurrentTitle(dto.getCurrentTitle());
         profile.setIndustry(dto.getIndustry());
-        profile.setYearOfStudy(normalizeYearOfStudy(dto.getYearOfStudy()));
         profile.setYearsOfExperience(dto.getYearsOfExperience() != null ? dto.getYearsOfExperience() : 0.0);
         profile.setBio(dto.getBio());
         profile.setEducation(dto.getEducation());
         profile.setLanguages(dto.getLanguages());
         profile.setSkillList(dto.getSkills() != null ? dto.getSkills() : List.of());
         profile.setTargetRoles(dto.getTargetRoles() != null ? String.join(", ", dto.getTargetRoles()) : "");
-        profile.setTargetLocations(dto.getTargetLocations() != null ? String.join(", ", dto.getTargetLocations()) : "");
-        profile.setWillingToRelocate(dto.getWillingToRelocate() != null ? dto.getWillingToRelocate() : false);
-        profile.setTargetWorkType(dto.getTargetWorkType() != null ? dto.getTargetWorkType() : "ANY");
         profile.setRawCvText(rawCvText);
 
         clearLearningState(profile);
@@ -195,7 +209,7 @@ public class ProfileService {
     }
 
     /**
-     * Writes the fields the profile form owns and reports whether anything actually moved.
+     * Writes the profile fields the form owns and reports whether anything actually moved.
      * Comparison happens after normalisation so re-saving the same form is recognised as a no-op.
      */
     private boolean applyEditableFields(UserProfile profile, ProfileDto dto) {
@@ -209,28 +223,11 @@ public class ProfileService {
         changed |= setIfChanged(dto.getBio(), profile.getBio(), profile::setBio);
         changed |= setIfChanged(dto.getEducation(), profile.getEducation(), profile::setEducation);
         changed |= setIfChanged(dto.getLanguages(), profile.getLanguages(), profile::setLanguages);
-        changed |= setIfChanged(dto.getTargetWorkType(), profile.getTargetWorkType(), profile::setTargetWorkType);
         changed |= setIfChanged(dto.getRawCvText(), profile.getRawCvText(), profile::setRawCvText);
-
-        if (dto.getYearOfStudy() != null) {
-            // "" means the user picked "Not specified" and wants the stored year removed; a value
-            // outside the canonical list is a client bug and is rejected rather than stored.
-            String normalized = normalizeYearOfStudy(dto.getYearOfStudy());
-            if (!Objects.equals(normalized, profile.getYearOfStudy())) {
-                profile.setYearOfStudy(normalized);
-                changed = true;
-            }
-        }
 
         if (dto.getYearsOfExperience() != null
                 && !Objects.equals(dto.getYearsOfExperience(), profile.getYearsOfExperience())) {
             profile.setYearsOfExperience(dto.getYearsOfExperience());
-            changed = true;
-        }
-
-        if (dto.getWillingToRelocate() != null
-                && !Objects.equals(dto.getWillingToRelocate(), profile.getWillingToRelocate())) {
-            profile.setWillingToRelocate(dto.getWillingToRelocate());
             changed = true;
         }
 
@@ -248,14 +245,39 @@ public class ProfileService {
                 changed = true;
             }
         }
-        if (dto.getTargetLocations() != null) {
-            String joined = joinList(dto.getTargetLocations());
-            if (!Objects.equals(joined, joinList(profile.getTargetLocationList()))) {
-                profile.setTargetLocations(joined);
+
+        return changed;
+    }
+
+    /** Writes the career-goal fields. Returns whether any of them moved. */
+    private boolean applyGoalFields(UserProfile profile, ProfileDto dto) {
+        boolean changed = false;
+
+        changed |= setIfChanged(dto.getTargetRole(), profile.getTargetRole(), profile::setTargetRole);
+        changed |= setIfChanged(dto.getTargetJobDescription(), profile.getTargetJobDescription(),
+                profile::setTargetJobDescription);
+
+        if (dto.getTargetSeniority() != null) {
+            String normalized = normalizeSeniority(dto.getTargetSeniority());
+            if (!Objects.equals(normalized, profile.getTargetSeniority())) {
+                profile.setTargetSeniority(normalized);
                 changed = true;
             }
         }
-
+        if (dto.getPlanDurationMonths() != null) {
+            Integer normalized = normalizeDuration(dto.getPlanDurationMonths());
+            if (!Objects.equals(normalized, profile.getPlanDurationMonths())) {
+                profile.setPlanDurationMonths(normalized);
+                changed = true;
+            }
+        }
+        if (dto.getPlanHoursPerWeek() != null) {
+            Integer normalized = normalizeHoursPerWeek(dto.getPlanHoursPerWeek());
+            if (!Objects.equals(normalized, profile.getPlanHoursPerWeek())) {
+                profile.setPlanHoursPerWeek(normalized);
+                changed = true;
+            }
+        }
         return changed;
     }
 
@@ -285,63 +307,107 @@ public class ProfileService {
         return String.join(", ", cleaned);
     }
 
-    /**
-     * Maps an incoming year to its canonical form.
-     *
-     * @return null for null, blank or "Not specified"; the canonical label otherwise
-     * @throws ProfileValidationException when the value is outside the canonical list
-     */
-    public static String normalizeYearOfStudy(String raw) {
+    // ---------------------------------------------------------------------
+    // Goal
+    // ---------------------------------------------------------------------
+
+    /** @throws ProfileValidationException when the value is outside {@link #SENIORITY_VALUES} */
+    public static String normalizeSeniority(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        String upper = raw.trim().toUpperCase(Locale.ROOT);
+        if (SENIORITY_VALUES.contains(upper)) {
+            return upper;
+        }
+        throw new ProfileValidationException("targetSeniority must be one of " + SENIORITY_VALUES + ".");
+    }
+
+    /** @throws ProfileValidationException when the value is not 1, 3 or 6 */
+    public static Integer normalizeDuration(Integer raw) {
         if (raw == null) {
             return null;
         }
-        String trimmed = raw.trim();
-        if (trimmed.isEmpty() || trimmed.equalsIgnoreCase("Not specified")) {
-            return null;
-        }
-        for (String allowed : YEAR_OF_STUDY_VALUES) {
-            if (allowed.equalsIgnoreCase(trimmed)) {
-                return allowed;
-            }
+        if (DURATION_MONTHS_VALUES.contains(raw)) {
+            return raw;
         }
         throw new ProfileValidationException(
-                "yearOfStudy must be one of " + YEAR_OF_STUDY_VALUES + ", an empty string to clear it, or omitted.");
+                "planDurationMonths must be one of " + DURATION_MONTHS_VALUES + ".");
+    }
+
+    /** @throws ProfileValidationException when the value is outside 1..{@value #MAX_HOURS_PER_WEEK} */
+    public static Integer normalizeHoursPerWeek(Integer raw) {
+        if (raw == null) {
+            return null;
+        }
+        if (raw >= 1 && raw <= MAX_HOURS_PER_WEEK) {
+            return raw;
+        }
+        throw new ProfileValidationException(
+                "planHoursPerWeek must be between 1 and " + MAX_HOURS_PER_WEEK + ".");
+    }
+
+    /** The stored goal as the pipeline wants it, or null when the student has not set one yet. */
+    public CareerGoalDto goalOf(UserProfile profile) {
+        if (profile.getTargetRole() == null || profile.getTargetRole().isBlank()) {
+            return null;
+        }
+        CareerGoalDto goal = new CareerGoalDto();
+        goal.targetRole = profile.getTargetRole();
+        goal.targetSeniority = profile.getTargetSeniority();
+        goal.jobDescription = profile.getTargetJobDescription();
+        goal.durationMonths = profile.getPlanDurationMonths();
+        goal.hoursPerWeek = profile.getPlanHoursPerWeek();
+        return goal;
     }
 
     /**
-     * Same mapping, but for values a language model produced. A model that answers "third year" or
-     * "2024" has failed to follow the contract; that is not a reason to fail the whole CV upload,
-     * so the year is simply dropped.
+     * What is still missing before a plan can be generated, in the words the UI shows.
+     * An empty list means the inputs are complete.
      */
-    public static String normalizeYearOfStudyLenient(String raw) {
-        try {
-            return normalizeYearOfStudy(raw);
-        } catch (ProfileValidationException e) {
-            log.debug("Discarding unusable yearOfStudy value from an extraction");
-            return null;
+    public List<String> missingPlanInputs(UserProfile profile) {
+        List<String> missing = new ArrayList<>();
+        if (profile.getSkillList().isEmpty()
+                && (profile.getRawCvText() == null || profile.getRawCvText().isBlank())) {
+            missing.add("your profile: upload a CV or list your skills");
         }
+        if (profile.getTargetRole() == null || profile.getTargetRole().isBlank()) {
+            missing.add("the role you are aiming at");
+        }
+        if (profile.getTargetSeniority() == null) {
+            missing.add("the level you are aiming at");
+        }
+        if (profile.getPlanDurationMonths() == null) {
+            missing.add("how long the plan should be");
+        }
+        if (profile.getPlanHoursPerWeek() == null) {
+            missing.add("how many hours a week you can study");
+        }
+        return missing;
     }
 
     // ---------------------------------------------------------------------
-    // Learning snapshot and progress
+    // Plan snapshot and progress
     // ---------------------------------------------------------------------
 
-    /** Drops the stored audit/roadmap and every tick that belonged to it. */
+    /** Drops the stored plan and every tick that belonged to it. */
     public void clearLearningState(UserProfile profile) {
         profile.setLearningSnapshotJson(null);
         profile.setLearningSnapshotVersion(null);
         profile.setLearningSnapshotProfileKey(null);
+        profile.setLearningSnapshotGoalKey(null);
         profile.setCompletedMilestones(null);
     }
 
-    /** Self-reported milestone ids, in the order they were ticked. Never null. */
+    /** Self-reported checkable ids, in the order they were ticked. Never null. */
     public List<String> readCompletedMilestones(UserProfile profile) {
         String raw = profile.getCompletedMilestones();
         if (raw == null || raw.isBlank()) {
             return new ArrayList<>();
         }
         try {
-            List<String> parsed = objectMapper.readValue(raw, new com.fasterxml.jackson.core.type.TypeReference<List<String>>() {});
+            List<String> parsed = objectMapper.readValue(raw,
+                    new com.fasterxml.jackson.core.type.TypeReference<List<String>>() {});
             return parsed != null ? new ArrayList<>(parsed) : new ArrayList<>();
         } catch (Exception e) {
             // Legacy or corrupted content. Losing ticks is preferable to failing every profile read.
@@ -359,14 +425,14 @@ public class ProfileService {
         }
     }
 
-    /** roadmapId inside the stored snapshot, or null when there is no usable snapshot. */
-    public String readSnapshotRoadmapId(UserProfile profile) {
+    /** planId inside the stored snapshot, or null when there is no usable snapshot. */
+    public String readSnapshotPlanId(UserProfile profile) {
         String raw = profile.getLearningSnapshotJson();
         if (raw == null || raw.isBlank()) {
             return null;
         }
         try {
-            JsonNode node = objectMapper.readTree(raw).path("careerRoadmap").path("roadmapId");
+            JsonNode node = objectMapper.readTree(raw).path("planId");
             return node.isTextual() ? node.asText() : null;
         } catch (Exception e) {
             return null;
@@ -383,20 +449,21 @@ public class ProfileService {
         dto.setPhone(entity.getPhone());
         dto.setCurrentTitle(entity.getCurrentTitle());
         dto.setIndustry(entity.getIndustry());
-        dto.setYearOfStudy(entity.getYearOfStudy());
         dto.setYearsOfExperience(entity.getYearsOfExperience());
         dto.setBio(entity.getBio());
         dto.setSkills(entity.getSkillList());
         dto.setEducation(entity.getEducation());
         dto.setLanguages(entity.getLanguages());
         dto.setTargetRoles(entity.getTargetRoleList());
-        dto.setTargetLocations(entity.getTargetLocationList());
-        dto.setWillingToRelocate(entity.getWillingToRelocate());
-        dto.setTargetWorkType(entity.getTargetWorkType());
         dto.setRawCvText(entity.getRawCvText());
         dto.setUpdatedAt(entity.getUpdatedAt());
+        dto.setTargetRole(entity.getTargetRole());
+        dto.setTargetSeniority(entity.getTargetSeniority());
+        dto.setTargetJobDescription(entity.getTargetJobDescription());
+        dto.setPlanDurationMonths(entity.getPlanDurationMonths());
+        dto.setPlanHoursPerWeek(entity.getPlanHoursPerWeek());
         dto.setCompletedMilestones(readCompletedMilestones(entity));
-        dto.setRoadmapId(readSnapshotRoadmapId(entity));
+        dto.setPlanId(readSnapshotPlanId(entity));
         return dto;
     }
 }
