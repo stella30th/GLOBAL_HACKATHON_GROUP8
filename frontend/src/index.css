@@ -30,6 +30,75 @@
   --shadow-md: 0 8px 24px -4px rgba(0, 0, 0, 0.45);
   --shadow-lg: 0 16px 36px -6px rgba(0, 0, 0, 0.6);
   --shadow-glow: 0 0 24px rgba(99, 102, 241, 0.25);
+
+  /* Semantic tokens for values that used to be hardcoded inside component style objects.
+     Anything a component paints must resolve through these, otherwise it cannot follow the theme:
+     white text is invisible on a white page. */
+  --surface-subtle: rgba(255, 255, 255, 0.03);
+  --surface-inset: rgba(0, 0, 0, 0.25);
+  --accent-soft: #818cf8;
+  --accent-emerald: #34d399;
+  --accent-amber: #fbbf24;
+  --accent-violet: #c084fc;
+  --score-high: #10b981;
+  --score-mid: #f59e0b;
+  --score-low: #ef4444;
+  --bg-header: rgba(10, 13, 22, 0.85);
+  --gradient-wordmark: linear-gradient(135deg, #ffffff 30%, var(--text-secondary) 100%);
+  --overlay-scrim: rgba(0, 0, 0, 0.75);
+  --bg-modal: #0f1523;
+  --gradient-hero: linear-gradient(135deg, rgba(99, 102, 241, 0.12) 0%, rgba(6, 182, 212, 0.08) 100%);
+}
+
+/*
+ * Light theme: white page, warm light-brown surfaces and accent.
+ *
+ * Applied by a `data-theme` attribute on <html> rather than by media query alone, so an explicit
+ * choice survives a system theme that disagrees with it.
+ */
+[data-theme='light'] {
+  --bg-main: #ffffff;
+  --bg-card: #fbf7f2;
+  --bg-card-hover: #f5ece1;
+  --bg-secondary: #faf5ee;
+  --bg-tertiary: #f0e4d6;
+
+  --border-color: rgba(138, 104, 71, 0.18);
+  --border-active: rgba(169, 114, 74, 0.55);
+
+  --text-primary: #2f2419;
+  --text-secondary: #6d5a48;
+  --text-muted: #96836d;
+
+  --accent-primary: #a9724a;
+  --accent-primary-hover: #8d5c38;
+  --accent-secondary: #b1743f;
+  --accent-success: #15803d;
+  --accent-warning: #b45309;
+  --accent-danger: #b91c1c;
+
+  --gradient-primary: linear-gradient(135deg, #c08b5c 0%, #a9724a 100%);
+  --gradient-card: linear-gradient(180deg, rgba(169, 114, 74, 0.05) 0%, rgba(169, 114, 74, 0.02) 100%);
+  --shadow-sm: 0 2px 8px rgba(88, 63, 40, 0.08);
+  --shadow-md: 0 8px 24px -4px rgba(88, 63, 40, 0.12);
+  --shadow-lg: 0 16px 36px -6px rgba(88, 63, 40, 0.18);
+  --shadow-glow: 0 0 24px rgba(169, 114, 74, 0.18);
+
+  --surface-subtle: rgba(169, 114, 74, 0.06);
+  --surface-inset: rgba(169, 114, 74, 0.10);
+  /* Semantic hues are kept but darkened: the dark-theme versions fail contrast on white. */
+  --accent-soft: #8a5a33;
+  --accent-emerald: #047857;
+  --accent-amber: #b45309;
+  --accent-violet: #7c3aed;
+  --score-high: #047857;
+  --score-mid: #b45309;
+  --score-low: #b91c1c;
+  --bg-header: rgba(255, 253, 250, 0.9);
+  --gradient-wordmark: linear-gradient(135deg, #3a2c1e 30%, var(--accent-primary) 100%);
+  --overlay-scrim: rgba(62, 45, 30, 0.45);
+  --bg-modal: #fffdfa;
+  --gradient-hero: linear-gradient(135deg, rgba(169, 114, 74, 0.12) 0%, rgba(201, 153, 106, 0.07) 100%);
 }
 
 * {
@@ -41,6 +110,7 @@
 body {
   font-family: var(--font-sans);
   background-color: var(--bg-main);
+  transition: background-color 0.25s ease, color 0.25s ease;
   color: var(--text-primary);
   min-height: 100vh;
   line-height: 1.5;

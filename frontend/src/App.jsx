@@ -47,6 +47,7 @@ export default function App() {
   const [wakeSeconds, setWakeSeconds] = useState(0);
   const [backendInput, setBackendInput] = useState('');
   const [toast, setToast] = useState(null);
+  const [theme, setTheme] = useState(initialTheme);
   const connectingRef = useRef(false);
 
   /**
@@ -196,7 +197,12 @@ export default function App() {
 
   return (
     <div className="app-container">
-      <Navbar activeTab={activeTab} setActiveTab={setActiveTab} isConnected={isConnected} />
+      <Navbar
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        theme={theme}
+        onToggleTheme={() => setTheme((t) => (t === 'light' ? 'dark' : 'light'))}
+      />
 
       {status === STATUS.CONNECTING && (
         <div className="conn-banner conn-banner-waking">
@@ -285,7 +291,7 @@ export default function App() {
 
       {toast && (
         <div className="toast">
-          <CheckCircle2 size={18} color="#10b981" />
+          <CheckCircle2 size={18} style={{ color: 'var(--accent-emerald)' }} />
           <span>{toast}</span>
         </div>
       )}

@@ -42,14 +42,15 @@ export default function Navbar({ activeTab, setActiveTab, isConnected }) {
         })}
       </nav>
 
-      <div className="system-status" style={{ borderColor: isConnected ? 'rgba(16, 185, 129, 0.3)' : 'rgba(245, 158, 11, 0.3)' }}>
-        <span className="status-dot" style={{ background: isConnected ? '#10b981' : '#f59e0b', boxShadow: isConnected ? '0 0 8px #10b981' : '0 0 8px #f59e0b' }}></span>
-        {/* Reports the backend connection only. Whether the AI itself answered is shown per result,
-            since the two can differ: the server can be up while Gemini is rate limited. */}
-        <span style={{ color: isConnected ? '#10b981' : '#f59e0b' }}>
-          {isConnected ? 'Server connected' : 'Offline mode'}
-        </span>
-      </div>
+      <button
+        type="button"
+        className="theme-toggle"
+        onClick={onToggleTheme}
+        title={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
+        aria-label={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
+      >
+        {theme === 'light' ? <Moon size={17} /> : <Sun size={17} />}
+      </button>
     </header>
   );
 }

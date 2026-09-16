@@ -182,7 +182,7 @@ export default function ResumeAuditView({ profile, onPracticeMilestone, onToggle
       <div className="score-hero-card">
         <div style={{ maxWidth: '700px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', color: '#818cf8', fontSize: '0.85rem', fontWeight: '700', textTransform: 'uppercase' }}>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', color: 'var(--accent-soft)', fontSize: '0.85rem', fontWeight: '700', textTransform: 'uppercase' }}>
               <Award size={16} />
               <span>CV / profile quality score (ATS screening)</span>
             </div>
@@ -196,7 +196,7 @@ export default function ResumeAuditView({ profile, onPracticeMilestone, onToggle
               </span>
             )}
           </div>
-          <h2 style={{ fontSize: '1.8rem', color: '#ffffff', marginBottom: '0.6rem' }}>
+          <h2 style={{ fontSize: '1.8rem', color: 'var(--text-primary)', marginBottom: '0.6rem' }}>
             {audit.verdict}
           </h2>
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.925rem', lineHeight: '1.6' }}>

@@ -34,7 +34,7 @@ public class DataSeeder implements CommandLineRunner {
                 createJob(
                         "Senior Backend Engineer (Distributed Systems)",
                         "Grab Financial Group",
-                        "https://images.unsplash.com/photo-1542744173-8e7e53415bb0?w=120&auto=format&fit=crop&q=60",
+                        null,
                         "Marina One, Singapore",
                         "Singapore",
                         true,
@@ -58,7 +58,7 @@ public class DataSeeder implements CommandLineRunner {
                 createJob(
                         "Full Stack Cloud Engineer (Java & React)",
                         "Zalando SE",
-                        "https://images.unsplash.com/photo-1572021335469-31706a17aaef?w=120&auto=format&fit=crop&q=60",
+                        null,
                         "Berlin, Germany",
                         "Germany",
                         true,
@@ -82,7 +82,7 @@ public class DataSeeder implements CommandLineRunner {
                 createJob(
                         "Cloud & Backend Specialist (Global Team)",
                         "Rakuten Group",
-                        "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=120&auto=format&fit=crop&q=60",
+                        null,
                         "Tokyo, Japan",
                         "Japan",
                         true,
@@ -106,7 +106,7 @@ public class DataSeeder implements CommandLineRunner {
                 createJob(
                         "Senior Platform Engineer (100% Remote Worldwide)",
                         "GitLab / Remote Tech Partners",
-                        "https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=120&auto=format&fit=crop&q=60",
+                        null,
                         "Remote Worldwide",
                         "Global",
                         true,
@@ -130,7 +130,7 @@ public class DataSeeder implements CommandLineRunner {
                 createJob(
                         "Software Engineer - Core Services",
                         "Canva",
-                        "https://images.unsplash.com/photo-1551836022-d5d88e9218df?w=120&auto=format&fit=crop&q=60",
+                        null,
                         "Sydney, Australia",
                         "Australia",
                         true,
@@ -154,7 +154,7 @@ public class DataSeeder implements CommandLineRunner {
                 createJob(
                         "Lead Backend Engineer (High-throughput Systems)",
                         "VNG Corporation",
-                        "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=120&auto=format&fit=crop&q=60",
+                        null,
                         "Zalo Campus, District 7, Ho Chi Minh City",
                         "Vietnam",
                         false,
@@ -178,7 +178,7 @@ public class DataSeeder implements CommandLineRunner {
                 createJob(
                         "Cloud Solutions & DevOps Architect",
                         "FPT Software Global Delivery",
-                        "https://images.unsplash.com/photo-1497366216548-37526070297c?w=120&auto=format&fit=crop&q=60",
+                        null,
                         "FPT Tower, Cau Giay, Hanoi",
                         "Vietnam",
                         false,
@@ -202,7 +202,7 @@ public class DataSeeder implements CommandLineRunner {
                 createJob(
                         "Senior Frontend Engineer (React / Next.js)",
                         "MoMo Super App (M_Service)",
-                        "https://images.unsplash.com/photo-1556742049-0a67c5574f73?w=120&auto=format&fit=crop&q=60",
+                        null,
                         "District 7, Ho Chi Minh City",
                         "Vietnam",
                         false,
@@ -226,7 +226,7 @@ public class DataSeeder implements CommandLineRunner {
                 createJob(
                         "Full Stack Developer (React & Node/Java)",
                         "Silicon Valley Seed Startup",
-                        "https://images.unsplash.com/photo-1519389950473-47ba0277781c?w=120&auto=format&fit=crop&q=60",
+                        null,
                         "Remote (US East Coast timezone overlap)",
                         "United States",
                         true,

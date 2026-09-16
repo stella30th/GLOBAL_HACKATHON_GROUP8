@@ -4,15 +4,18 @@ import {
   ExternalLink, Sparkles,
   X, Compass, ShieldCheck, ArrowRight, Plane, RefreshCw, Loader2, Dumbbell
 } from 'lucide-react';
-import { fetchMatches, syncExternalJobs, fetchJobAiDeepDive } from '../api';
+import { fetchMatches, fetchJobAiDeepDive, saveProfile } from '../api';
+import CompanyLogo from './CompanyLogo';
+import JobFilterPanel from './JobFilterPanel';
 
 export default function JobMatchingView({ showToast, onPracticeQuestion }) {
   const [matches, setMatches] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [syncing, setSyncing] = useState(false);
   const [keyword, setKeyword] = useState('');
   const [activeFilter, setActiveFilter] = useState('ALL'); // ALL, VN, OVERSEAS, REMOTE, VISA
   const [selectedMatch, setSelectedMatch] = useState(null);
+  const [savingPreferences, setSavingPreferences] = useState(false);
+  const saveTimer = useRef(null);
   const [deepDiveData, setDeepDiveData] = useState({});
   const [loadingDeepDive, setLoadingDeepDive] = useState(false);
 
@@ -23,8 +26,11 @@ export default function JobMatchingView({ showToast, onPracticeQuestion }) {
       if (keyword.trim()) params.keyword = keyword.trim();
       if (activeFilter === 'VN') params.isOverseas = false;
       if (activeFilter === 'OVERSEAS') params.isOverseas = true;
-      if (activeFilter === 'REMOTE') params.workType = 'REMOTE';
       if (activeFilter === 'VISA') params.visaSponsorship = true;
+      // Work arrangement is a real query filter now rather than a profile note.
+      if (profile?.targetWorkType && profile.targetWorkType !== 'ANY') {
+        params.workType = profile.targetWorkType;
+      }
 
       const data = await fetchMatches(params);
       setMatches(data);
@@ -37,27 +43,36 @@ export default function JobMatchingView({ showToast, onPracticeQuestion }) {
 
   useEffect(() => {
     loadMatches();
-  }, [activeFilter]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeFilter, profile?.targetWorkType, profile?.willingToRelocate, profile?.targetLocations]);
 
-  const handleSearchSubmit = (e) => {
-    e.preventDefault();
-    loadMatches();
-  };
-
-  const handleSync = async () => {
-    setSyncing(true);
-    try {
-      const res = await syncExternalJobs();
-      if (showToast) {
-        showToast(res.message || 'Synced live job opportunities from global APIs! 🌐');
+  /**
+   * Preferences live on the profile, so every change is persisted. Writes are debounced: adding
+   * three target markets in a row should be one request, not three, and each save triggers a
+   * rescore of the whole result set.
+   */
+  const persistPreferences = useCallback((patch) => {
+    const updated = { ...profile, ...patch };
+    setProfile(updated);
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    setSavingPreferences(true);
+    saveTimer.current = setTimeout(async () => {
+      try {
+        await saveProfile(updated);
+      } catch (err) {
+        console.error(err);
+        if (showToast) showToast('Could not save your preferences.');
+      } finally {
+        setSavingPreferences(false);
       }
-      await loadMatches();
-    } catch (err) {
-      alert(err.message || 'Error syncing from external APIs');
-    } finally {
-      setSyncing(false);
-    }
-  };
+    }, 700);
+  }, [profile, setProfile, showToast]);
+
+  useEffect(() => () => {
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+  }, []);
+
+
 
   const handleGenerateDeepDive = async (jobId, { force = false } = {}) => {
     if (deepDiveData[jobId] && !force) return;
@@ -108,87 +123,44 @@ export default function JobMatchingView({ showToast, onPracticeQuestion }) {
             start practising.
           </p>
         </div>
-        <button
-          className="btn btn-outline btn-sm"
-          onClick={handleSync}
-          disabled={syncing || loading}
-          title="Fetch live jobs from Remotive, Jobicy, Remote OK, Himalayas, The Muse and Arbeitnow"
-        >
-          {syncing ? <Loader2 className="animate-spin" size={15} /> : <RefreshCw size={15} />}
-          <span>
-            {syncing
-              ? 'Fetching from 6 job boards…'
-              : '🔄 Sync jobs (Remotive · Jobicy · RemoteOK · Himalayas · The Muse · Arbeitnow)'}
-          </span>
-        </button>
       </div>
 
-      {/* Filter Bar */}
-      <div className="filter-bar">
-        <div className="filter-pills">
-          <button
-            className={`filter-pill ${activeFilter === 'ALL' ? 'active' : ''}`}
-            onClick={() => setActiveFilter('ALL')}
-          >
-            All Jobs ({matches.length})
-          </button>
-          <button
-            className={`filter-pill ${activeFilter === 'VN' ? 'active' : ''}`}
-            onClick={() => setActiveFilter('VN')}
-          >
-            🇻🇳 Domestic (Vietnam)
-          </button>
-          <button
-            className={`filter-pill ${activeFilter === 'OVERSEAS' ? 'active' : ''}`}
-            onClick={() => setActiveFilter('OVERSEAS')}
-          >
-            🌏 Overseas (Europe, Asia, US)
-          </button>
-          <button
-            className={`filter-pill ${activeFilter === 'REMOTE' ? 'active' : ''}`}
-            onClick={() => setActiveFilter('REMOTE')}
-          >
-            🌐 Remote Worldwide
-          </button>
-          <button
-            className={`filter-pill ${activeFilter === 'VISA' ? 'active' : ''}`}
-            onClick={() => setActiveFilter('VISA')}
-          >
-            🛂 Visa Sponsorship
-          </button>
-        </div>
-
-        <form onSubmit={handleSearchSubmit} style={{ display: 'flex', gap: '0.5rem', flex: '1', maxWidth: '360px' }}>
-          <div style={{ position: 'relative', width: '100%' }}>
-            <Search
-              size={16}
-              style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }}
-            />
-            <input
-              type="text"
-              className="form-control"
-              style={{ paddingLeft: '36px', width: '100%' }}
-              placeholder="Search by skill, role, location..."
-              value={keyword}
-              onChange={(e) => setKeyword(e.target.value)}
-            />
-          </div>
-          <button type="submit" className="btn btn-secondary btn-sm">
-            Search
-          </button>
-        </form>
-      </div>
+      <JobFilterPanel
+        resultCount={matches.length}
+        activeFilter={activeFilter}
+        onFilterChange={setActiveFilter}
+        keyword={keyword}
+        onKeywordChange={setKeyword}
+        onSearch={loadMatches}
+        workType={profile?.targetWorkType}
+        onWorkTypeChange={(value) => persistPreferences({ targetWorkType: value })}
+        willingToRelocate={profile?.willingToRelocate}
+        onRelocateChange={(value) => persistPreferences({ willingToRelocate: value })}
+        targetLocations={profile?.targetLocations || []}
+        onAddLocation={(loc) => {
+          const current = profile?.targetLocations || [];
+          if (!current.includes(loc)) {
+            persistPreferences({ targetLocations: [...current, loc] });
+          }
+        }}
+        onRemoveLocation={(loc) =>
+          persistPreferences({
+            targetLocations: (profile?.targetLocations || []).filter((item) => item !== loc),
+          })
+        }
+        savingPreferences={savingPreferences}
+      />
 
       {/* Job Grid */}
       {loading ? (
-        <div style={{ textAlign: 'center', padding: '4rem', color: 'var(--text-secondary)' }}>
-          <Sparkles className="animate-spin" size={32} style={{ margin: '0 auto 1rem', display: 'block', color: 'var(--accent-primary)' }} />
+        <div className="loading-panel">
+          <Sparkles className="ai-wave" size={32} style={{ margin: '0 auto 1rem', display: 'block', color: 'var(--accent-primary)' }} />
           AI is evaluating match compatibility and calculating skill gaps...
         </div>
       ) : matches.length === 0 ? (
         <div className="glass-card" style={{ textAlign: 'center', padding: '3.5rem' }}>
           <Compass size={40} color="var(--text-muted)" style={{ margin: '0 auto 1rem', display: 'block' }} />
-          <h3 style={{ color: '#fff', marginBottom: '0.5rem' }}>No opportunities found matching this filter</h3>
+          <h3 style={{ color: 'var(--text-primary)', marginBottom: '0.5rem' }}>No opportunities found matching this filter</h3>
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
             Try adjusting your search criteria or switch filter back to "All Jobs".
           </p>
@@ -201,11 +173,7 @@ export default function JobMatchingView({ showToast, onPracticeQuestion }) {
               <div key={job.id} className="job-card">
                 <div>
                   <div className="job-card-header">
-                    <img
-                      src={job.companyLogo || 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=120&auto=format&fit=crop&q=60'}
-                      alt={job.company}
-                      className="company-avatar"
-                    />
+                    <CompanyLogo company={job.company} src={job.companyLogo} size={44} radius={10} />
                     <div className={`match-score-badge ${getScoreClass(item.overallScore)}`}>
                       {item.overallScore}%
                     </div>
@@ -220,8 +188,8 @@ export default function JobMatchingView({ showToast, onPracticeQuestion }) {
 
                   <div className="job-meta-row">
                     <span className="job-meta-item">
-                      <DollarSign size={14} color="#10b981" />
-                      <strong style={{ color: '#10b981' }}>{job.salaryRange}</strong>
+                      <DollarSign size={14} style={{ color: 'var(--accent-emerald)' }} />
+                      <strong style={{ color: 'var(--accent-emerald)' }}>{job.salaryRange}</strong>
                     </span>
                     <span className="job-meta-item">
                       <Briefcase size={14} />
@@ -268,7 +236,7 @@ export default function JobMatchingView({ showToast, onPracticeQuestion }) {
                   {/* AI Quick Insight */}
                   <div
                     style={{
-                      background: 'rgba(255, 255, 255, 0.03)',
+                      background: 'var(--surface-subtle)',
                       borderLeft: '2px solid var(--accent-primary)',
                       padding: '0.65rem 0.85rem',
                       borderRadius: '6px',
@@ -278,7 +246,7 @@ export default function JobMatchingView({ showToast, onPracticeQuestion }) {
                       marginBottom: '1.25rem',
                     }}
                   >
-                    <span style={{ color: '#818cf8', fontWeight: '600' }}>AI Insight: </span>
+                    <span style={{ color: 'var(--accent-soft)', fontWeight: '600' }}>AI Insight: </span>
                     {item.aiSummary}
                   </div>
                 </div>
@@ -306,17 +274,13 @@ export default function JobMatchingView({ showToast, onPracticeQuestion }) {
             </button>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
-              <img
-                src={selectedMatch.job.companyLogo || 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=120&auto=format&fit=crop&q=60'}
-                alt={selectedMatch.job.company}
-                style={{ width: '56px', height: '56px', borderRadius: '12px', objectFit: 'cover' }}
-              />
+              <CompanyLogo company={selectedMatch.job.company} src={selectedMatch.job.companyLogo} size={56} radius={12} />
               <div>
-                <h2 style={{ fontSize: '1.35rem', color: '#fff', marginBottom: '0.2rem' }}>
+                <h2 style={{ fontSize: '1.35rem', color: 'var(--text-primary)', marginBottom: '0.2rem' }}>
                   {selectedMatch.job.title}
                 </h2>
                 <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
-                  {selectedMatch.job.company} • {getCountryFlag(selectedMatch.job.country)} {selectedMatch.job.location} • <span style={{ color: '#818cf8' }}>Source: {selectedMatch.job.source || 'Direct'}</span>
+                  {selectedMatch.job.company} • {getCountryFlag(selectedMatch.job.country)} {selectedMatch.job.location} • <span style={{ color: 'var(--accent-soft)' }}>Source: {selectedMatch.job.source || 'Direct'}</span>
                 </div>
               </div>
             </div>
@@ -327,7 +291,7 @@ export default function JobMatchingView({ showToast, onPracticeQuestion }) {
                 display: 'grid',
                 gridTemplateColumns: 'repeat(4, 1fr)',
                 gap: '1rem',
-                background: 'rgba(255, 255, 255, 0.03)',
+                background: 'var(--surface-subtle)',
                 padding: '1.25rem',
                 borderRadius: '14px',
                 marginBottom: '1.5rem',
@@ -335,7 +299,7 @@ export default function JobMatchingView({ showToast, onPracticeQuestion }) {
               }}
             >
               <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: '1.4rem', fontWeight: '800', color: '#10b981' }}>
+                <div style={{ fontSize: '1.4rem', fontWeight: '800', color: 'var(--accent-emerald)' }}>
                   {selectedMatch.overallScore}%
                 </div>
                 <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
@@ -343,7 +307,7 @@ export default function JobMatchingView({ showToast, onPracticeQuestion }) {
                 </div>
               </div>
               <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: '1.4rem', fontWeight: '800', color: '#6366f1' }}>
+                <div style={{ fontSize: '1.4rem', fontWeight: '800', color: 'var(--accent-primary)' }}>
                   {selectedMatch.skillsScore}%
                 </div>
                 <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
@@ -351,7 +315,7 @@ export default function JobMatchingView({ showToast, onPracticeQuestion }) {
                 </div>
               </div>
               <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: '1.4rem', fontWeight: '800', color: '#06b6d4' }}>
+                <div style={{ fontSize: '1.4rem', fontWeight: '800', color: 'var(--accent-secondary)' }}>
                   {selectedMatch.experienceScore}%
                 </div>
                 <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
@@ -359,7 +323,7 @@ export default function JobMatchingView({ showToast, onPracticeQuestion }) {
                 </div>
               </div>
               <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: '1.4rem', fontWeight: '800', color: '#f59e0b' }}>
+                <div style={{ fontSize: '1.4rem', fontWeight: '800', color: 'var(--accent-amber)' }}>
                   {selectedMatch.relocationScore}%
                 </div>
                 <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
@@ -380,7 +344,7 @@ export default function JobMatchingView({ showToast, onPracticeQuestion }) {
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '0.75rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#c084fc', fontWeight: '700', fontSize: '0.95rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--accent-violet)', fontWeight: '700', fontSize: '0.95rem' }}>
                   <Sparkles size={18} />
                   <span>Deep dive &amp; interview strategy</span>
                   {deepDiveData[selectedMatch.job.id]?.generatedBy === 'gemini' && (
@@ -412,9 +376,14 @@ export default function JobMatchingView({ showToast, onPracticeQuestion }) {
 
               {loadingDeepDive ? (
                 <div style={{ padding: '1.5rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
-                  <Sparkles className="animate-spin" size={24} style={{ margin: '0 auto 0.5rem', display: 'block', color: '#c084fc' }} />
-                  AI is comparing your profile against this posting, assessing work authorisation
-                  and drafting interview questions…
+                  <Sparkles className="ai-wave" size={24} style={{ margin: '0 auto 0.5rem', display: 'block', color: 'var(--accent-violet)' }} />
+                  <span>
+                    AI is comparing your profile against this posting, assessing work authorisation
+                    and drafting interview questions
+                  </span>
+                  <span className="wave-dots" style={{ color: 'var(--accent-violet)' }}>
+                    <span /><span /><span />
+                  </span>
                 </div>
               ) : deepDiveData[selectedMatch.job.id] ? (
                 <div>
@@ -423,8 +392,8 @@ export default function JobMatchingView({ showToast, onPracticeQuestion }) {
                   </p>
 
                   {/* Deep dive visa */}
-                  <div style={{ background: 'rgba(0,0,0,0.25)', borderRadius: '8px', padding: '0.75rem 1rem', marginBottom: '0.85rem' }}>
-                    <div style={{ fontSize: '0.8rem', fontWeight: '700', color: '#818cf8', marginBottom: '0.25rem' }}>
+                  <div style={{ background: 'var(--surface-inset)', borderRadius: '8px', padding: '0.75rem 1rem', marginBottom: '0.85rem' }}>
+                    <div style={{ fontSize: '0.8rem', fontWeight: '700', color: 'var(--accent-soft)', marginBottom: '0.25rem' }}>
                       ✈️ Visa & Immigration Feasibility:
                     </div>
                     <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
@@ -434,8 +403,8 @@ export default function JobMatchingView({ showToast, onPracticeQuestion }) {
 
                   {/* Interview questions */}
                   {deepDiveData[selectedMatch.job.id].interviewQuestions && deepDiveData[selectedMatch.job.id].interviewQuestions.length > 0 && (
-                    <div style={{ background: 'rgba(0,0,0,0.25)', borderRadius: '8px', padding: '0.75rem 1rem', marginBottom: '0.85rem' }}>
-                      <div style={{ fontSize: '0.8rem', fontWeight: '700', color: '#34d399', marginBottom: '0.35rem' }}>
+                    <div style={{ background: 'var(--surface-inset)', borderRadius: '8px', padding: '0.75rem 1rem', marginBottom: '0.85rem' }}>
+                      <div style={{ fontSize: '0.8rem', fontWeight: '700', color: 'var(--accent-emerald)', marginBottom: '0.35rem' }}>
                         🎯 Predicted Interview Questions & Tech Prep:
                       </div>
                       <ul style={{ paddingLeft: '1.2rem', fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
@@ -457,7 +426,7 @@ export default function JobMatchingView({ showToast, onPracticeQuestion }) {
                         ))}
                       </ul>
                       {deepDiveData[selectedMatch.job.id].interviewTips && (
-                        <div style={{ marginTop: '0.5rem', fontSize: '0.8rem', color: '#fbbf24' }}>
+                        <div style={{ marginTop: '0.5rem', fontSize: '0.8rem', color: 'var(--accent-amber)' }}>
                           💡 <strong>Pro Tip:</strong> {deepDiveData[selectedMatch.job.id].interviewTips}
                         </div>
                       )}
@@ -490,7 +459,7 @@ export default function JobMatchingView({ showToast, onPracticeQuestion }) {
                 marginBottom: '1.5rem',
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#818cf8', fontWeight: '700', marginBottom: '0.35rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--accent-soft)', fontWeight: '700', marginBottom: '0.35rem' }}>
                 <Plane size={16} />
                 <span>Standard Relocation & Visa Snapshot</span>
               </div>
@@ -506,12 +475,12 @@ export default function JobMatchingView({ showToast, onPracticeQuestion }) {
 
             {/* Skill Gap Analysis */}
             <div style={{ marginBottom: '1.5rem' }}>
-              <h4 style={{ color: '#fff', fontSize: '0.95rem', marginBottom: '0.75rem' }}>
+              <h4 style={{ color: 'var(--text-primary)', fontSize: '0.95rem', marginBottom: '0.75rem' }}>
                 Skill Gap & Keyword Alignment
               </h4>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                 <div style={{ background: 'rgba(16, 185, 129, 0.05)', padding: '1rem', borderRadius: '10px', border: '1px solid rgba(16, 185, 129, 0.2)' }}>
-                  <div style={{ fontSize: '0.8rem', fontWeight: '700', color: '#34d399', marginBottom: '0.5rem' }}>
+                  <div style={{ fontSize: '0.8rem', fontWeight: '700', color: 'var(--accent-emerald)', marginBottom: '0.5rem' }}>
                     Matched Skills in Your Profile ({selectedMatch.matchedSkills.length})
                   </div>
                   <div className="tag-container">
@@ -522,7 +491,7 @@ export default function JobMatchingView({ showToast, onPracticeQuestion }) {
                 </div>
 
                 <div style={{ background: 'rgba(245, 158, 11, 0.05)', padding: '1rem', borderRadius: '10px', border: '1px solid rgba(245, 158, 11, 0.2)' }}>
-                  <div style={{ fontSize: '0.8rem', fontWeight: '700', color: '#fbbf24', marginBottom: '0.5rem' }}>
+                  <div style={{ fontSize: '0.8rem', fontWeight: '700', color: 'var(--accent-amber)', marginBottom: '0.5rem' }}>
                     Missing / Required Skills ({selectedMatch.missingSkills.length})
                   </div>
                   <div className="tag-container">
@@ -536,7 +505,7 @@ export default function JobMatchingView({ showToast, onPracticeQuestion }) {
 
             {/* AI Action Items */}
             <div style={{ marginBottom: '1.5rem' }}>
-              <h4 style={{ color: '#fff', fontSize: '0.95rem', marginBottom: '0.5rem' }}>
+              <h4 style={{ color: 'var(--text-primary)', fontSize: '0.95rem', marginBottom: '0.5rem' }}>
                 Action Items from AI Coach to Boost Your Offer Probability:
               </h4>
               <ul style={{ paddingLeft: '1.25rem', color: 'var(--text-secondary)', fontSize: '0.875rem', lineHeight: '1.6' }}>
@@ -548,12 +517,12 @@ export default function JobMatchingView({ showToast, onPracticeQuestion }) {
 
             {/* Job Description & Requirements */}
             <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '1.25rem', marginBottom: '1.5rem' }}>
-              <h4 style={{ color: '#fff', fontSize: '0.95rem', marginBottom: '0.4rem' }}>Role Description & Scope</h4>
+              <h4 style={{ color: 'var(--text-primary)', fontSize: '0.95rem', marginBottom: '0.4rem' }}>Role Description & Scope</h4>
               <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', lineHeight: '1.6', marginBottom: '1rem' }}>
                 {selectedMatch.job.description}
               </p>
 
-              <h4 style={{ color: '#fff', fontSize: '0.95rem', marginBottom: '0.4rem' }}>Compensation & Benefits</h4>
+              <h4 style={{ color: 'var(--text-primary)', fontSize: '0.95rem', marginBottom: '0.4rem' }}>Compensation & Benefits</h4>
               <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', lineHeight: '1.6' }}>
                 {selectedMatch.job.benefits}
               </p>
