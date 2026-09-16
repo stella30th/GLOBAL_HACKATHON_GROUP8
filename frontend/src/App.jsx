@@ -83,7 +83,7 @@ export default function App() {
   const handleConnectBackend = () => {
     if (!backendInput.trim()) return;
     setCustomBackendUrl(backendInput.trim());
-    showToast('Đã lưu URL backend. Đang kết nối lại...');
+    showToast('Backend URL saved. Reconnecting...');
     connect();
   };
 
@@ -97,11 +97,11 @@ export default function App() {
         <div className="conn-banner conn-banner-waking">
           <Loader2 className="animate-spin" size={15} />
           <span>
-            Đang kết nối máy chủ…
+            Connecting to the server…
             {wakeSeconds > 6 && (
               <>
-                {' '}Máy chủ đang khởi động lại sau thời gian nghỉ (gói Render Free tự tắt sau 15 phút
-                không dùng). Lần đầu thường mất khoảng 50–60 giây — <strong>{wakeSeconds}s</strong>.
+                {' '}The server is waking up after being idle (the Render free plan sleeps after 15
+                minutes). The first request usually takes 50-60 seconds — <strong>{wakeSeconds}s</strong>.
               </>
             )}
           </span>
@@ -113,21 +113,21 @@ export default function App() {
           <div className="conn-banner-msg">
             <AlertTriangle size={15} />
             <span>
-              Không kết nối được máy chủ tại <code>{getApiBase()}</code>. Đang chạy ở chế độ xem offline.
+              Could not reach the server at <code>{getApiBase()}</code>. Running in offline preview mode.
             </span>
           </div>
           <div className="conn-banner-actions">
             <input
               type="text"
-              placeholder="Dán URL backend (vd: https://aicareer-backend-xxxx.onrender.com)"
+              placeholder="Paste backend URL (e.g. https://aicareer-backend-xxxx.onrender.com)"
               value={backendInput}
               onChange={(e) => setBackendInput(e.target.value)}
               className="conn-input"
             />
             <button onClick={handleConnectBackend} className="btn btn-primary btn-sm">
-              Kết nối
+              Connect
             </button>
-            <button onClick={connect} title="Thử lại" className="btn btn-sm conn-retry">
+            <button onClick={connect} title="Retry" className="btn btn-sm conn-retry">
               <RefreshCw size={13} />
             </button>
           </div>

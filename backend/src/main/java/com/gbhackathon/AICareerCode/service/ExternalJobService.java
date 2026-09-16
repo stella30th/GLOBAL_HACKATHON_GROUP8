@@ -141,7 +141,7 @@ public class ExternalJobService {
         result.put("field", field.label());
         result.put("totalJobsInDatabase", total);
         result.put("message", String.format(
-                "Đã thêm %d việc làm mới từ %d nguồn (Remotive, Jobicy, RemoteOK, Himalayas, The Muse, Arbeitnow) cho lĩnh vực: %s.",
+                "Added %d new jobs from %d sources (Remotive, Jobicy, RemoteOK, Himalayas, The Muse, Arbeitnow) for field: %s.",
                 added, perSource.size(), field.label()));
         return result;
     }

@@ -13,7 +13,7 @@ import java.util.List;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class ResumeAuditDto {
     private int healthScore; // 0 - 100
-    private String verdict;   // "Cần cải thiện", "Khá tốt", "Xuất sắc chuẩn quốc tế"
+    private String verdict;   // e.g. "Needs work", "Solid foundation", "Ready to apply"
     private String summary;
     private List<String> strengths;
     private List<String> weaknesses;

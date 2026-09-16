@@ -346,7 +346,7 @@ public class AiCoachService {
                 %s
                 - Answer the user's actual question directly. Do not open with a greeting or a menu of
                   services; the user has already started the conversation.
-                - Reply in the same language the user writes in (Vietnamese question, Vietnamese answer).
+                - Answer in English by default. If the user writes in another language, reply in that language.
                 - Use concise Markdown. Be concrete and specific to this candidate rather than generic.
 
                 CANDIDATE:

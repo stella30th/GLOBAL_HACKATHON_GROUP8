@@ -4,19 +4,19 @@ import { sendChatMessage } from '../api';
 
 export default function AiCoachChatView({ profile, isConnected }) {
   const buildWelcome = (p) => {
-    const name = p?.fullName || 'bạn';
-    const title = p?.currentTitle || 'ứng viên';
-    const field = p?.industry ? ` trong lĩnh vực **${p.industry}**` : '';
+    const name = p?.fullName || 'there';
+    const title = p?.currentTitle || 'candidate';
+    const field = p?.industry ? ` in **${p.industry}**` : '';
     const skills = (p?.skills || []).slice(0, 5).join(', ');
-    return `Chào ${name}! Mình là **AI Career Coach** của bạn.
+    return `Hi ${name}! I am your **AI Career Coach**.
 
 ` +
-      `Mình đang đọc hồ sơ của bạn: **${title}**${field}` +
-      `${skills ? `, với các kỹ năng chính: ${skills}` : ''}.
+      `I have read your profile: **${title}**${field}` +
+      `${skills ? `, with core skills in ${skills}` : ''}.
 
 ` +
-      `Hãy hỏi mình bất cứ điều gì về lộ trình nghề nghiệp, CV, phỏng vấn, lương thưởng hoặc cơ hội ở nước ngoài — ` +
-      `mình sẽ trả lời dựa trên đúng ngành và hồ sơ của bạn.`;
+      `Ask me anything about your career path, CV, interviews, compensation or opportunities abroad — ` +
+      `I will answer for your actual field and profile.`;
   };
 
   const [messages, setMessages] = useState(() => [
@@ -68,7 +68,7 @@ export default function AiCoachChatView({ profile, isConnected }) {
         ...updatedMessages,
         {
           role: 'assistant',
-          content: 'Không kết nối được tới AI Coach. Máy chủ có thể đang khởi động lại — vui lòng thử lại sau ít giây.',
+          content: 'Could not reach the AI Coach. The server may still be starting up — please try again in a few seconds.',
           generatedBy: 'error',
         },
       ]);
@@ -87,19 +87,19 @@ export default function AiCoachChatView({ profile, isConnected }) {
   // Suggestions follow the candidate's own field. The previous fixed list asked about EU Blue Cards
   // for developers and system-design interviews, which is the wrong conversation to offer someone
   // whose CV is about integrated circuits, nursing or accounting.
-  const role = profile?.currentTitle || 'vị trí của tôi';
-  const field = profile?.industry || 'ngành của tôi';
+  const role = profile?.currentTitle || 'my role';
+  const field = profile?.industry || 'my field';
   const topSkill = (profile?.skills || [])[0];
   const targetRole = (profile?.targetRoles || [])[0] || role;
 
   const quickPrompts = [
-    `🧭 Lộ trình 6 tháng tới để tôi ứng tuyển vị trí ${targetRole}?`,
-    `🧩 Hồ sơ của tôi còn thiếu kỹ năng gì so với yêu cầu tuyển dụng ${field}?`,
-    `🎤 Cho tôi 5 câu hỏi phỏng vấn thường gặp cho ${targetRole}`,
+    `🧭 What should my next 6 months look like to land ${targetRole} roles?`,
+    `🧩 Which skills is my profile missing compared with ${field} job requirements?`,
+    `🎤 Give me 5 common interview questions for ${targetRole} roles`,
     topSkill
-      ? `📝 Viết lại một gạch đầu dòng CV về ${topSkill} theo công thức STAR có số liệu`
-      : '📝 Cách viết gạch đầu dòng CV theo công thức STAR có số liệu',
-    `✈️ Cơ hội và điều kiện visa để làm ${field} ở nước ngoài?`,
+      ? `📝 Rewrite a CV bullet about ${topSkill} using the STAR formula with metrics`
+      : '📝 How do I write CV bullets using the STAR formula with metrics?',
+    `✈️ What are the visa options for working in ${field} abroad?`,
   ];
 
   // Markdown formatter
@@ -143,8 +143,8 @@ export default function AiCoachChatView({ profile, isConnected }) {
         <div className="page-header-text">
           <h1>AI Career Coach</h1>
           <p>
-            Trao đổi trực tiếp với AI về lộ trình nghề nghiệp, CV, phỏng vấn và cơ hội quốc tế —
-            dựa trên đúng hồ sơ và lĩnh vực của bạn
+            Talk directly with an AI coach about your career path, CV, interviews and international
+            opportunities — grounded in your own profile and field
             {profile?.industry ? ` (${profile.industry})` : ''}.
           </p>
         </div>
@@ -173,7 +173,7 @@ export default function AiCoachChatView({ profile, isConnected }) {
                       </span>
                     )}
                     {msg.generatedBy === 'offline' && (
-                      <span className="ai-badge ai-badge-offline">AI tạm không khả dụng</span>
+                      <span className="ai-badge ai-badge-offline">AI unavailable</span>
                     )}
                   </>
                 )}
@@ -187,7 +187,7 @@ export default function AiCoachChatView({ profile, isConnected }) {
           {loading && (
             <div className="chat-bubble chat-bubble-ai" style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
               <Loader2 className="animate-spin" size={16} color="#818cf8" />
-              <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>AI đang phân tích hồ sơ của bạn và soạn câu trả lời…</span>
+              <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>AI is reviewing your profile and writing an answer…</span>
             </div>
           )}
           <div ref={messagesEndRef} />
@@ -212,7 +212,7 @@ export default function AiCoachChatView({ profile, isConnected }) {
           <input
             type="text"
             className="chat-input"
-            placeholder="Hỏi AI về lộ trình nghề nghiệp, CV, phỏng vấn, lương thưởng, cơ hội nước ngoài…"
+            placeholder="Ask about your career path, CV, interviews, compensation, working abroad…"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}

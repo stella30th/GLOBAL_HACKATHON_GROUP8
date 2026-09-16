@@ -76,7 +76,7 @@ public class CoachController {
         UserProfile profile = profileService.getCurrentOrCreateProfile();
         String userMsg = request.getMessage() != null ? request.getMessage().trim() : "";
         if (userMsg.isEmpty()) {
-            return ResponseEntity.badRequest().body(Map.of("reply", "Vui lòng nhập câu hỏi của bạn."));
+            return ResponseEntity.badRequest().body(Map.of("reply", "Please enter a question."));
         }
         String reply = aiCoachService.chat(profile, request.getHistory(), userMsg);
         Object lastWorkingModel = aiCoachService.aiStatus().get("lastWorkingModel");

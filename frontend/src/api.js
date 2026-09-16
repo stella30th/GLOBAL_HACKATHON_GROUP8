@@ -168,7 +168,7 @@ function cacheProfile(profile) {
 
 export async function fetchCurrentProfile(timeoutMs = WAKE_TIMEOUT_MS) {
   const res = await fetchWithRetry(`${getApiBase()}/profiles/current`, {}, timeoutMs);
-  if (!res.ok) throw new Error('Không thể tải hồ sơ');
+  if (!res.ok) throw new Error('Could not load your profile');
   const profile = await res.json();
   cacheProfile(profile);
   return profile;
@@ -180,7 +180,7 @@ export async function saveProfile(profileData) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(profileData),
   });
-  if (!res.ok) throw new Error('Không thể lưu hồ sơ');
+  if (!res.ok) throw new Error('Could not save your profile');
   const profile = await res.json();
   cacheProfile(profile);
   return profile;
@@ -196,7 +196,7 @@ export async function uploadCvFile(file) {
   }, AI_TIMEOUT_MS);
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || 'Lỗi khi tải file CV');
+    throw new Error(err.error || 'Could not upload the CV file');
   }
   const profile = await res.json();
   cacheProfile(profile);
@@ -205,7 +205,7 @@ export async function uploadCvFile(file) {
 
 export async function resetSampleProfile(type) {
   const res = await fetchWithTimeout(`${getApiBase()}/profiles/reset-sample/${type}`, { method: 'POST' });
-  if (!res.ok) throw new Error('Không thể chuyển hồ sơ mẫu');
+  if (!res.ok) throw new Error('Could not switch to the sample profile');
   const profile = await res.json();
   cacheProfile(profile);
   return profile;
@@ -228,20 +228,20 @@ function buildQuery(params) {
 
 export async function fetchJobs(params = {}) {
   const res = await fetchWithRetry(`${getApiBase()}/jobs?${buildQuery(params)}`);
-  if (!res.ok) throw new Error('Không thể tải danh sách việc làm');
+  if (!res.ok) throw new Error('Could not load the job list');
   return res.json();
 }
 
 export async function fetchMatches(params = {}) {
   const res = await fetchWithRetry(`${getApiBase()}/matches?${buildQuery(params)}`);
-  if (!res.ok) throw new Error('Không thể tính toán kết quả ghép việc');
+  if (!res.ok) throw new Error('Could not calculate job matches');
   return res.json();
 }
 
 export async function syncExternalJobs() {
   // Five job boards are queried in sequence, which takes a while on a cold instance.
   const res = await fetchWithTimeout(`${getApiBase()}/jobs/sync-external`, { method: 'POST' }, 120000);
-  if (!res.ok) throw new Error('Không thể đồng bộ việc làm từ API');
+  if (!res.ok) throw new Error('Could not sync jobs from the job boards');
   return res.json();
 }
 
@@ -251,13 +251,13 @@ export async function syncExternalJobs() {
 
 export async function fetchProfileAudit() {
   const res = await fetchWithTimeout(`${getApiBase()}/coach/audit`, {}, AI_TIMEOUT_MS);
-  if (!res.ok) throw new Error('Không thể phân tích hồ sơ');
+  if (!res.ok) throw new Error('Could not analyse your profile');
   return res.json();
 }
 
 export async function fetchRoadmap() {
   const res = await fetchWithTimeout(`${getApiBase()}/coach/roadmap`, {}, AI_TIMEOUT_MS);
-  if (!res.ok) throw new Error('Không thể tải lộ trình sự nghiệp');
+  if (!res.ok) throw new Error('Could not load your career roadmap');
   return res.json();
 }
 
@@ -267,7 +267,7 @@ export async function sendChatMessage(message, history = []) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ message, history }),
   }, AI_TIMEOUT_MS);
-  if (!res.ok) throw new Error('Không thể kết nối với AI Coach');
+  if (!res.ok) throw new Error('Could not reach the AI Coach');
   return res.json();
 }
 
@@ -281,6 +281,6 @@ export async function fetchJobAiDeepDive(jobId) {
 export async function fetchAiStatus(probe = false) {
   const res = await fetchWithTimeout(
     `${getApiBase()}/coach/ai-status${probe ? '?probe=true' : ''}`, {}, probe ? AI_TIMEOUT_MS : 15000);
-  if (!res.ok) throw new Error('Không thể kiểm tra trạng thái AI');
+  if (!res.ok) throw new Error('Could not check AI status');
   return res.json();
 }

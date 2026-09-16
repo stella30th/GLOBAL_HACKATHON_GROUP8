@@ -237,9 +237,10 @@ public class CvParserService {
         profile.setEducation(detectEducation(text, lower));
 
         List<String> targetRoles = new ArrayList<>();
-        String objective = extractObjectiveRoles(lower, domain);
-        if (objective != null) {
-            targetRoles.add(objective);
+        for (String role : extractObjectiveRoles(lower, domain)) {
+            if (!targetRoles.contains(role)) {
+                targetRoles.add(role);
+            }
         }
         if (profile.getCurrentTitle() != null && !targetRoles.contains(profile.getCurrentTitle())) {
             targetRoles.add(profile.getCurrentTitle());
@@ -408,24 +409,35 @@ public class CvParserService {
         return null;
     }
 
-    private String extractObjectiveRoles(String lower, DomainRule domain) {
+    private List<String> extractObjectiveRoles(String lower, DomainRule domain) {
         int idx = lower.indexOf("objective");
         if (idx < 0) idx = lower.indexOf("career goal");
         if (idx < 0) idx = lower.indexOf("mục tiêu");
         if (idx < 0) {
-            return null;
+            return List.of(domain.roleLabel);
         }
         String section = lower.substring(idx, Math.min(lower.length(), idx + 400));
-        Matcher m = Pattern.compile("(?:internship|position|role|opportunity)\\s+in\\s+([a-z0-9 /&-]{3,50})").matcher(section);
+        Matcher m = Pattern.compile("(?:internship|position|role|opportunity)\\s+in\\s+([a-z0-9 /&-]{3,60})").matcher(section);
         if (m.find()) {
-            String role = m.group(1).trim();
-            // Trim trailing filler so "rtl design in which i could help" becomes "RTL Design".
-            role = role.replaceAll("\\s+(in which|where|that|to|and)\\b.*$", "").trim();
-            if (role.length() >= 3) {
-                return capitalizeWords(role);
+            String phrase = m.group(1)
+                    // Trim trailing filler so "rtl design in which i could help" ends at the role.
+                    .replaceAll("\\s+(in which|where|that|which|to|for|at)\\b.*$", "")
+                    .trim();
+            List<String> roles = new ArrayList<>();
+            // An objective often names two acceptable roles; keep them as separate entries so
+            // matching can compare each one against a job title.
+            for (String part : phrase.split("\\s+(?:or|and)\\s+|\\s*/\\s*|\\s*,\\s*")) {
+                String role = titleCase(part.trim());
+                if (role.length() >= 3 && !roles.contains(role)) {
+                    roles.add(role);
+                }
+                if (roles.size() == 3) break;
+            }
+            if (!roles.isEmpty()) {
+                return roles;
             }
         }
-        return domain.roleLabel;
+        return List.of(domain.roleLabel);
     }
 
     // ---------------------------------------------------------------------
@@ -467,13 +479,26 @@ public class CvParserService {
         return new ArrayList<>(cleaned);
     }
 
-    private static String capitalizeWords(String input) {
-        String[] parts = input.split("\\s+");
+    /**
+     * Acronyms these fields are full of. A plain capitalise-the-first-letter pass turned
+     * "rtl design or digital ic design" into "Rtl Design Or Digital Ic Design".
+     */
+    private static final Set<String> ACRONYMS = Set.of(
+            "rtl", "ic", "vlsi", "asic", "fpga", "soc", "hdl", "uvm", "dft", "sta", "pcb", "cad",
+            "cpu", "gpu", "iot", "ai", "ml", "ui", "ux", "qa", "hr", "it", "sql", "api", "erp",
+            "crm", "seo", "sem", "cnc", "plc", "bim", "fea", "sre");
+
+    private static String titleCase(String input) {
         StringBuilder sb = new StringBuilder();
-        for (String part : parts) {
+        for (String part : input.split("\\s+")) {
             if (part.isEmpty()) continue;
             if (sb.length() > 0) sb.append(' ');
-            sb.append(Character.toUpperCase(part.charAt(0))).append(part.substring(1));
+            String lower = part.toLowerCase(Locale.ROOT);
+            if (ACRONYMS.contains(lower)) {
+                sb.append(lower.toUpperCase(Locale.ROOT));
+            } else {
+                sb.append(Character.toUpperCase(part.charAt(0))).append(part.substring(1));
+            }
         }
         return sb.toString();
     }

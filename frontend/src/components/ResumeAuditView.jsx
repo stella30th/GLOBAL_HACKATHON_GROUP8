@@ -30,8 +30,8 @@ export default function ResumeAuditView({ profile }) {
     return (
       <div style={{ textAlign: 'center', padding: '4rem', color: 'var(--text-secondary)' }}>
         <Sparkles className="animate-spin" size={32} style={{ margin: '0 auto 1rem', display: 'block', color: 'var(--accent-primary)' }} />
-        AI đang đánh giá hồ sơ của <strong>{profile?.fullName || 'bạn'}</strong>
-        {profile?.industry ? <> theo tiêu chuẩn ngành <strong>{profile.industry}</strong></> : null}…
+        AI is reviewing <strong>{profile?.fullName || 'your profile'}</strong>
+        {profile?.industry ? <> against hiring standards in <strong>{profile.industry}</strong></> : null}…
       </div>
     );
   }
@@ -55,9 +55,9 @@ export default function ResumeAuditView({ profile }) {
         <div className="page-header-text">
           <h1>Resume Audit & Career Progression Roadmap</h1>
           <p>
-            Ứng viên: <strong style={{ color: '#fff' }}>{profile?.fullName || 'Hồ sơ hiện tại'}</strong>
-            {' '}({profile?.currentTitle || 'chưa xác định'}{profile?.industry ? ` — ${profile.industry}` : ''})
-            {' '}• Đánh giá theo chuẩn ATS quốc tế cho đúng ngành của bạn.
+            Candidate: <strong style={{ color: '#fff' }}>{profile?.fullName || 'Current profile'}</strong>
+            {' '}({profile?.currentTitle || 'role not set'}{profile?.industry ? ` — ${profile.industry}` : ''})
+            {' '}• Scored against international ATS standards for your own field.
           </p>
         </div>
         <button className="btn btn-primary btn-sm" onClick={loadAudit} disabled={loading}>
@@ -75,7 +75,7 @@ export default function ResumeAuditView({ profile }) {
             </div>
             {audit.generatedBy === 'offline' ? (
               <span className="ai-badge ai-badge-offline" title={audit.offlineReason || ''}>
-                Phân tích offline (AI tạm không khả dụng)
+                Offline analysis (AI unavailable)
               </span>
             ) : (
               <span className="ai-badge ai-badge-live">

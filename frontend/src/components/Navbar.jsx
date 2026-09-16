@@ -47,7 +47,7 @@ export default function Navbar({ activeTab, setActiveTab, isConnected }) {
         {/* Reports the backend connection only. Whether the AI itself answered is shown per result,
             since the two can differ: the server can be up while Gemini is rate limited. */}
         <span style={{ color: isConnected ? '#10b981' : '#f59e0b' }}>
-          {isConnected ? 'Đã kết nối máy chủ' : 'Chế độ offline'}
+          {isConnected ? 'Server connected' : 'Offline mode'}
         </span>
       </div>
     </header>

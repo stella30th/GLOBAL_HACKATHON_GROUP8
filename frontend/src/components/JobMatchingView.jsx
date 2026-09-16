@@ -67,8 +67,8 @@ export default function JobMatchingView({ profile, showToast }) {
       setDeepDiveData(prev => ({ ...prev, [jobId]: data }));
       if (showToast) {
         showToast(data.generatedBy === 'gemini'
-          ? `✨ ${data.model || 'Gemini'} đã phân tích xong vị trí này!`
-          : '⚠️ AI tạm không khả dụng — đang hiển thị phân tích offline.');
+          ? `✨ ${data.model || 'Gemini'} finished analysing this role!`
+          : '⚠️ AI is unavailable — showing the offline analysis instead.');
       }
     } catch (err) {
       console.error(err);
@@ -110,13 +110,13 @@ export default function JobMatchingView({ profile, showToast }) {
           className="btn btn-outline btn-sm"
           onClick={handleSync}
           disabled={syncing || loading}
-          title="Fetch live jobs from Arbeitnow (EU/Visa) and Remotive (Global Remote)"
+          title="Fetch live jobs from Remotive, Jobicy, Remote OK, Himalayas, The Muse and Arbeitnow"
         >
           {syncing ? <Loader2 className="animate-spin" size={15} /> : <RefreshCw size={15} />}
           <span>
             {syncing
-              ? 'Đang lấy dữ liệu từ 5 nguồn…'
-              : '🔄 Đồng bộ việc làm (Remotive · Jobicy · RemoteOK · The Muse · Arbeitnow)'}
+              ? 'Fetching from 6 job boards…'
+              : '🔄 Sync jobs (Remotive · Jobicy · RemoteOK · Himalayas · The Muse · Arbeitnow)'}
           </span>
         </button>
       </div>
@@ -242,7 +242,7 @@ export default function JobMatchingView({ profile, showToast }) {
                   {(item.matchedSkills.length > 0 || item.missingSkills.length > 0) ? (
                     <div style={{ marginBottom: '1rem' }}>
                       <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.35rem' }}>
-                        Kỹ năng khớp ({item.matchedSkills.length}) &amp; còn thiếu ({item.missingSkills.length}):
+                        Matched ({item.matchedSkills.length}) &amp; missing ({item.missingSkills.length}):
                       </div>
                       <div className="tag-container">
                         {item.matchedSkills.slice(0, 3).map((s) => (
@@ -259,7 +259,7 @@ export default function JobMatchingView({ profile, showToast }) {
                     </div>
                   ) : (
                     <div style={{ marginBottom: '1rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                      Tin tuyển dụng này không liệt kê kỹ năng cụ thể — hãy mở mô tả để xem yêu cầu chi tiết.
+                      This posting does not list specific skills — open the description for the full requirements.
                     </div>
                   )}
 
@@ -380,7 +380,7 @@ export default function JobMatchingView({ profile, showToast }) {
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '0.75rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#c084fc', fontWeight: '700', fontSize: '0.95rem' }}>
                   <Sparkles size={18} />
-                  <span>Phân tích chuyên sâu &amp; chiến lược phỏng vấn</span>
+                  <span>Deep dive &amp; interview strategy</span>
                   {deepDiveData[selectedMatch.job.id]?.generatedBy === 'gemini' && (
                     <span className="ai-badge ai-badge-live">
                       {deepDiveData[selectedMatch.job.id].model || 'Gemini'}
@@ -391,7 +391,7 @@ export default function JobMatchingView({ profile, showToast }) {
                       className="ai-badge ai-badge-offline"
                       title={deepDiveData[selectedMatch.job.id].offlineReason || ''}
                     >
-                      Phân tích offline
+                      Offline analysis
                     </span>
                   )}
                 </div>
@@ -403,7 +403,7 @@ export default function JobMatchingView({ profile, showToast }) {
                     style={{ background: 'linear-gradient(135deg, #8b5cf6, #6366f1)' }}
                   >
                     {loadingDeepDive ? <Loader2 className="animate-spin" size={14} /> : <Sparkles size={14} />}
-                    <span>{loadingDeepDive ? 'Đang phân tích…' : '⚡ Chạy phân tích AI'}</span>
+                    <span>{loadingDeepDive ? 'Analysing…' : '⚡ Run AI analysis'}</span>
                   </button>
                 )}
               </div>
@@ -411,8 +411,8 @@ export default function JobMatchingView({ profile, showToast }) {
               {loadingDeepDive ? (
                 <div style={{ padding: '1.5rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
                   <Sparkles className="animate-spin" size={24} style={{ margin: '0 auto 0.5rem', display: 'block', color: '#c084fc' }} />
-                  AI đang đối chiếu hồ sơ của bạn với tin tuyển dụng này, đánh giá khả năng làm việc hợp pháp
-                  và soạn câu hỏi phỏng vấn…
+                  AI is comparing your profile against this posting, assessing work authorisation
+                  and drafting interview questions…
                 </div>
               ) : deepDiveData[selectedMatch.job.id] ? (
                 <div>
@@ -454,13 +454,13 @@ export default function JobMatchingView({ profile, showToast }) {
                     onClick={() => handleGenerateDeepDive(selectedMatch.job.id, { force: true })}
                     style={{ fontSize: '0.75rem', marginTop: '0.25rem' }}
                   >
-                    <RefreshCw size={12} /> Phân tích lại
+                    <RefreshCw size={12} /> Re-run analysis
                   </button>
                 </div>
               ) : (
                 <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', margin: 0 }}>
-                  Bấm <strong>"⚡ Chạy phân tích AI"</strong> ở trên để AI đối chiếu trực tiếp CV của bạn với tin
-                  tuyển dụng này: mức độ phù hợp thật, khoảng trống kỹ năng, câu hỏi phỏng vấn và điều kiện visa.
+                  Click <strong>"⚡ Run AI analysis"</strong> above to compare your CV directly against this
+                  posting: real fit, skill gaps, likely interview questions and visa requirements.
                 </p>
               )}
             </div>

@@ -11,7 +11,7 @@ public class MatchResultDto {
     private int domainScore;       // 0 - 100%: how close the role is to the candidate's profession
     private List<String> matchedSkills;
     private List<String> missingSkills;
-    private String visaSuitability; // "Sẵn sàng", "Cần bảo lãnh Visa", "Cơ hội cao", "Thách thức ngoại ngữ"
+    private String visaSuitability; // e.g. "Remote role - no visa required", "Visa sponsorship stated"
     private String aiSummary;
     private List<String> actionItems;
 

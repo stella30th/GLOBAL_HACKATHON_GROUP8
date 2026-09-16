@@ -40,13 +40,13 @@ public class ProfileController {
     @PostMapping("/upload-cv")
     public ResponseEntity<?> uploadAndParseCv(@RequestParam("file") MultipartFile file) {
         if (file.isEmpty()) {
-            return ResponseEntity.badRequest().body(Map.of("error", "Vui lòng chọn một tệp tin CV."));
+            return ResponseEntity.badRequest().body(Map.of("error", "Please choose a CV file to upload."));
         }
         try {
             String text = cvParserService.extractTextFromFile(file);
             if (text == null || text.replaceAll("\\s+", "").length() < 40) {
                 return ResponseEntity.badRequest().body(Map.of("error",
-                        "Khong doc duoc noi dung van ban tu CV. Neu day la ban scan/anh, hay dung file PDF co text."));
+                        "No readable text was found in this CV. If it is a scan or an image, upload a PDF that contains selectable text."));
             }
             ProfileDto parsedProfile = cvParserService.parseCvTextToProfile(text);
             // A CV describes a whole candidate, so replace the stored profile rather than merging
@@ -54,7 +54,7 @@ public class ProfileController {
             UserProfile saved = profileService.replaceProfileFromCv(parsedProfile);
             return ResponseEntity.ok(profileService.toDto(saved));
         } catch (IOException e) {
-            return ResponseEntity.internalServerError().body(Map.of("error", "Lỗi đọc tệp tin: " + e.getMessage()));
+            return ResponseEntity.internalServerError().body(Map.of("error", "Could not read the file: " + e.getMessage()));
         }
     }
 

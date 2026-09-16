@@ -44,19 +44,19 @@ public class ProfileService {
         }
         // Create a default initial profile
         UserProfile p = new UserProfile();
-        p.setFullName("Nguyễn Văn A");
+        p.setFullName("New Candidate");
         p.setEmail("nguyenvana.tech@example.com");
         p.setPhone("+84 912 345 678");
         p.setCurrentTitle("Backend Engineer (Java / Spring)");
         p.setYearsOfExperience(3.0);
-        p.setEducation("Cử nhân Khoa học Máy tính - ĐH Bách Khoa");
-        p.setLanguages("Tiếng Việt (Bản ngữ), Tiếng Anh (IELTS 7.0 - Giao tiếp công việc tốt)");
+        p.setEducation("B.Sc. in Computer Science");
+        p.setLanguages("Vietnamese (Native), English (Professional working)");
         p.setSkills("Java, Spring Boot, MySQL, Docker, Redis, RESTful API, Microservices, Git, AWS");
         p.setTargetRoles("Senior Backend Engineer, Cloud Specialist");
-        p.setTargetLocations("Việt Nam, Singapore, Remote Toàn cầu, Đức");
+        p.setTargetLocations("Vietnam, Singapore, Remote Worldwide, Germany");
         p.setWillingToRelocate(true);
         p.setTargetWorkType("ANY");
-        p.setBio("3 năm kinh nghiệm phát triển hệ thống backend phân tán xử lý hàng triệu transaction. Đam mê học hỏi công nghệ mới, hướng đến việc làm việc tại môi trường công nghệ quốc tế hoặc công ty Product hàng đầu.");
+        p.setBio("Upload your CV to replace this placeholder profile with your own details.");
         p.setCreatedAt(LocalDateTime.now());
         p.setUpdatedAt(LocalDateTime.now());
         return profileRepository.save(p);
