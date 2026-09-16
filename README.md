@@ -14,21 +14,6 @@
 
 ---
 
-## 🚀 1-Click Cloud Deployment to Render
-
-This repository includes a `render.yaml` Blueprint that configures the entire stack (Database + Backend + Frontend) automatically:
-
-1. Sign up / Log in to [Render](https://render.com).
-2. Click **New +** -> **Blueprint**.
-3. Connect your GitHub repository: `https://github.com/stella30th/GLOBAL_HACKATHON_GROUP8.git`.
-4. Render will detect `render.yaml` and create:
-   - **aicareer-db**: Free Managed PostgreSQL Database
-   - **aicareer-backend**: Dockerized Spring Boot Web Service
-   - **aicareer-frontend**: High-speed Static Site with rewrite proxies
-5. Click **Apply**. Within a few minutes, Render will provide a permanent public URL (e.g., `https://aicareer-frontend.onrender.com`).
-
----
-
 ## 💻 Local Development
 
 1. **Start Database**:
