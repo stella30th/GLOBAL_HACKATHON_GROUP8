@@ -42,6 +42,16 @@ export default function DataSourcePanel({ onClose }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
+  const sourceLabel = (type) => {
+    switch (type) {
+      case 'LOCAL': return 'a local workbook on this instance';
+      case 'REMOTE': return 'fetched from the configured source';
+      case 'ADMIN_UPLOAD': return 'an admin upload on this instance (temporary, not durable)';
+      case 'REMOTE_OR_UPLOAD_CACHED': return 'a previously fetched or uploaded copy on this instance';
+      default: return 'none loaded yet';
+    }
+  };
+
   const taxonomy = status?.taxonomy;
   const retrieval = status?.retrieval;
   const ai = status?.ai;
@@ -82,8 +92,9 @@ export default function DataSourcePanel({ onClose }) {
                     <a href="https://sfia-online.org/en/sfia-9/documentation" target="_blank" rel="noopener noreferrer">
                       sfia-online.org
                     </a>
-                    , download the SFIA 9 skill descriptions workbook (.xlsx), and put it in{' '}
-                    <code>{taxonomy.sfiaExpectedDirectory}</code>.
+                    , download the SFIA 9 skill descriptions workbook (.xlsx), and put it in the
+                    folder named by <code>SFIA_DATA_DIR</code> (<code>backend/data/sfia/</code> by
+                    default), or set <code>SFIA_SOURCE_URL</code> so it is fetched automatically.
                   </p>
                   <p className="muted-note">
                     Until then, skills are normalised against this project's own technology
@@ -92,6 +103,22 @@ export default function DataSourcePanel({ onClose }) {
                   </p>
                 </div>
               )}
+              {taxonomy.sfiaUsingPreviousGoodData && (
+                <p className="status-warn">
+                  <AlertTriangle size={14} /> The last refresh failed
+                  {taxonomy.sfiaLastRefreshError ? `: ${taxonomy.sfiaLastRefreshError}` : ''} — still
+                  serving the SFIA data from the last successful load, not the failed attempt.
+                </p>
+              )}
+              <p className="muted-note">
+                Source: {sourceLabel(taxonomy.sfiaSourceType)}.{' '}
+                {taxonomy.sfiaAutoRefreshConfigured
+                  ? 'An automatic source is configured, so a reload re-fetches from it.'
+                  : 'No automatic source is configured; a reload reads whatever is on disk.'}
+                {taxonomy.sfiaLastRefreshAt
+                  ? ` Last successful refresh: ${new Date(taxonomy.sfiaLastRefreshAt).toLocaleString()}.`
+                  : ''}
+              </p>
               <p className="muted-note">
                 {taxonomy.extensionSkillCount} technology entries — concrete tools that SFIA
                 deliberately does not enumerate, kept separate from the framework itself.

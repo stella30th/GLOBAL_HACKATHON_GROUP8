@@ -7,6 +7,7 @@ import com.gbhackathon.AICareerCode.service.ProfileService;
 import com.gbhackathon.AICareerCode.service.ai.AiInvalidResponseException;
 import com.gbhackathon.AICareerCode.service.ai.AiUnavailableException;
 import com.gbhackathon.AICareerCode.service.ai.GeminiClient;
+import com.gbhackathon.AICareerCode.security.AdminTokenGuard;
 import com.gbhackathon.AICareerCode.service.retrieval.ResourceRetrievalService;
 import com.gbhackathon.AICareerCode.service.taxonomy.TaxonomyService;
 import org.slf4j.Logger;
@@ -40,17 +41,20 @@ public class PlanController {
     private final TaxonomyService taxonomyService;
     private final ResourceRetrievalService retrievalService;
     private final GeminiClient gemini;
+    private final AdminTokenGuard tokenGuard;
 
     public PlanController(ProfileService profileService,
                           LearningSnapshotService snapshotService,
                           TaxonomyService taxonomyService,
                           ResourceRetrievalService retrievalService,
-                          GeminiClient gemini) {
+                          GeminiClient gemini,
+                          AdminTokenGuard tokenGuard) {
         this.profileService = profileService;
         this.snapshotService = snapshotService;
         this.taxonomyService = taxonomyService;
         this.retrievalService = retrievalService;
         this.gemini = gemini;
+        this.tokenGuard = tokenGuard;
     }
 
     /**
@@ -212,15 +216,35 @@ public class PlanController {
         return ResponseEntity.ok(retrievalService.verifyAllUrls());
     }
 
-    /** Reloads the SFIA workbook and the bundled catalogues from disk without a restart. */
+    /**
+     * Reloads the SFIA workbook (always re-fetching from {@code SFIA_SOURCE_URL} first when one
+     * is configured, per {@link TaxonomyService#reloadSfia()}) and the bundled catalogues, all
+     * without a restart.
+     *
+     * <p>This can replace the reference data every analysis on the site is built from, so it now
+     * requires the same {@code X-Admin-Token} as the {@code /api/admin/**} endpoints - it was
+     * previously reachable by anyone, which meant anyone could force a fetch against
+     * {@code SFIA_SOURCE_URL} or overwrite a working taxonomy with whatever a broken source
+     * returned. No new secret was introduced: it is the same {@code ADMIN_TOKEN} already used
+     * for the admin upload and reload endpoints.
+     */
     @PostMapping("/data-status/reload")
-    public ResponseEntity<Map<String, Object>> reloadReferenceData() {
+    public ResponseEntity<Map<String, Object>> reloadReferenceData(
+            @RequestHeader(value = AdminTokenGuard.HEADER, required = false) String token) {
+        String denial = tokenGuard.denyReason(token);
+        if (denial != null) {
+            return ResponseEntity.status(tokenGuard.isConfigured() ? HttpStatus.UNAUTHORIZED : HttpStatus.SERVICE_UNAVAILABLE)
+                    .body(Map.of("error", denial));
+        }
+
         Map<String, Object> result = new LinkedHashMap<>();
         try {
-            taxonomyService.reloadSfia();
-            taxonomyService.loadExtensions();
-            taxonomyService.rebuildIndex();
-            result.put("taxonomy", taxonomyService.status());
+            int loaded = taxonomyService.reloadSfia();
+            if (loaded < 0) {
+                result.put("taxonomyError", "A SFIA refresh is already in progress; try again shortly.");
+            } else {
+                result.put("taxonomy", taxonomyService.status());
+            }
         } catch (Exception e) {
             result.put("taxonomyError", e.getMessage());
         }

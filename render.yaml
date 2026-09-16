@@ -25,10 +25,12 @@ services:
         value: gemini-3.5-flash
       # SFIA is licensed content, so it is neither committed nor baked into the image, and the
       # container filesystem is ephemeral so a file copied in by hand does not survive a cold
-      # start. The workbook is therefore fetched at start-up from private storage you control
-      # (Cloudflare R2, S3, or any URL that serves the .xlsx). Both values are secrets - set them
-      # in the Render dashboard, not here. Leave them unset and the app runs on the bundled
-      # technology vocabulary and says so in the Sources & data panel.
+      # start. The workbook is therefore fetched at start-up from private storage you control.
+      # Documented default: a private GitHub release asset, fetched via the GitHub REST API -
+      # see the "SFIA 9" section of README.md for the full runbook. Any URL that returns the raw
+      # .xlsx for a GET with an Authorization: Bearer header works too (Cloudflare R2, S3, ...).
+      # Both values are secrets - set them in the Render dashboard, not here. Leave them unset
+      # and the app runs on the bundled technology vocabulary and says so in the data panel.
       - key: SFIA_DATA_DIR
         value: /tmp/sfia
       - key: SFIA_SOURCE_URL

@@ -58,13 +58,29 @@ public class TaxonomyService {
     }
 
     /**
-     * Runs after {@link SfiaTaxonomyLoader}, which is ordered ahead of this by depending on the
-     * same event and being constructed first. Extensions are loaded regardless of whether SFIA is
-     * present, so a project without a SFIA licence still retrieves technology rows - and the UI
-     * still says plainly that the SFIA layer is missing.
+     * The single start-up sequence for the whole taxonomy: SFIA, then the technology extensions,
+     * then the retrieval index - in that explicit order, in this one method.
+     *
+     * <p>Earlier, {@link SfiaTaxonomyLoader} had its own {@code @EventListener} and this method
+     * relied on it having already run, by way of a comment about bean construction order rather
+     * than anything the framework actually guarantees. Two independent listeners on the same
+     * {@link ApplicationReadyEvent} have no ordering contract between them, so that was one
+     * dependency-injection change away from silently loading extensions before SFIA existed. There
+     * is now exactly one listener for this whole subsystem, and the order below is code, not a
+     * side effect of how beans happened to get constructed.
+     *
+     * <p>Start-up always passes {@code forceRefetch = false} to the loader: a workbook already on
+     * disk is used as-is, and the configured source - if any - is only contacted when nothing
+     * local is usable. A manual reload is what forces a fresh fetch; see
+     * {@link SfiaTaxonomyLoader#load(boolean)}.
      */
     @EventListener(ApplicationReadyEvent.class)
     public void initialise() {
+        try {
+            sfiaLoader.load(false);
+        } catch (Exception e) {
+            log.warn("SFIA taxonomy not loaded at start-up: {}", e.getMessage());
+        }
         try {
             loadExtensions();
         } catch (Exception e) {
@@ -148,11 +164,29 @@ public class TaxonomyService {
     }
 
     /**
-     * Re-reads the SFIA workbook from disk. Exposed so an operator can drop the licensed file in
-     * and have it picked up without a restart, which on a free hosting tier costs a cold boot.
+     * Reloads SFIA, the technology extensions and the retrieval index together, as one operation
+     * an operator triggers on purpose - a manual reload, not the start-up path above.
+     *
+     * <p>This always asks the loader to fetch fresh from {@code SFIA_SOURCE_URL} first when one is
+     * configured, even if a workbook is already sitting on disk: an operator who reloads means
+     * "get the current version from the source I configured", not "confirm the file that happens
+     * to be here already". Without that, a stale local copy - including one this same reload just
+     * wrote a minute ago from an admin upload - would keep winning forever and the button would
+     * look like it worked while doing nothing.
+     *
+     * @return skills now loaded, {@code 0} if none could be, or {@code -1} if a refresh was
+     *         already running and this call did nothing
      */
     public int reloadSfia() {
-        int loaded = sfiaLoader.load();
+        int loaded = sfiaLoader.load(true);
+        if (loaded < 0) {
+            return loaded;
+        }
+        try {
+            loadExtensions();
+        } catch (Exception e) {
+            log.warn("Could not reload the technology extension rows: {}", e.getMessage());
+        }
         rebuildIndex();
         return loaded;
     }
@@ -218,7 +252,18 @@ public class TaxonomyService {
         status.put("sfiaSkillCount", sfia);
         status.put("sfiaDatasetVersion", sfiaLoader.getDatasetVersion());
         status.put("sfiaUnavailableReason", sfia > 0 ? null : sfiaLoader.getUnavailableReason());
-        status.put("sfiaExpectedDirectory", sfiaLoader.getDirectory());
+        // How the currently loaded workbook got here - never the filesystem path it lives at.
+        status.put("sfiaSourceType", sfiaLoader.getActiveSourceType());
+        status.put("sfiaAutoRefreshConfigured", sfiaLoader.isSourceConfigured());
+        status.put("sfiaLastRefreshAt",
+                sfiaLoader.getLastSuccessAt() == null ? null : sfiaLoader.getLastSuccessAt().toString());
+        status.put("sfiaLastRefreshFailed", sfiaLoader.isLastAttemptFailed());
+        status.put("sfiaLastRefreshError",
+                sfiaLoader.isLastAttemptFailed() ? sfiaLoader.getLastAttemptError() : null);
+        // True when the most recent refresh attempt failed but an earlier successful load is
+        // still what is actually being served - so the panel can say so instead of leaving the
+        // failure and "SFIA loaded: yes" looking like two unrelated facts.
+        status.put("sfiaUsingPreviousGoodData", sfia > 0 && sfiaLoader.isLastAttemptFailed());
         status.put("extensionSkillCount", extensions);
         // How many technology rows carry a SFIA code the loaded framework actually confirms. The
         // suggested mapping in technology-extensions.json is this project's editorial guess; a low

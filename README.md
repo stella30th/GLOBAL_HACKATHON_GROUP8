@@ -124,42 +124,99 @@ curl "http://localhost:8080/api/coach/ai-status?probe=true"
 
 SFIA là nội dung **có bản quyền**: miễn phí cho phát triển cá nhân và phần lớn nhu cầu nội bộ của
 doanh nghiệp, nhưng phải **đăng ký tài khoản** mới tải được. Repo này không chứa và sẽ không chứa
-bản sao nào, và `backend/data/` nằm trong `.gitignore` để không commit nhầm.
+bản sao nào, và `backend/data/` nằm trong `.gitignore` để không commit nhầm. Xem `backend/.env.example`
+cho danh sách đầy đủ các biến ở mục này.
 
 ✅ **Đã chạy được với file thật.** Workbook `sfia-9_current-standard_en_260521.xlsx` cho ra
 **147 skills**, và **65/66** dòng từ vựng công nghệ khớp được mã SFIA thật. Xem số liệu hiện tại ở
 `GET /api/plan/data-status`.
 
+Backend chỉ **tải về** từ nguồn cấu hình — không có đường nào để nó tự đẩy file ngược lên GitHub,
+S3 hay R2, và không cần S3 SDK hay credentials có quyền ghi cho việc này.
+
 **Local:**
 
 1. Đăng ký tại [sfia-online.org](https://sfia-online.org/en/sfia-9/documentation).
 2. Vào **SFIA 9 → Documentation**, tải file Excel *"SFIA 9 skill descriptions"* (`.xlsx`).
-3. Đặt vào `backend/data/sfia/`.
-4. Khởi động lại backend, hoặc gọi `POST /api/admin/sfia/reload` với header `X-Admin-Token`.
+3. Đặt vào `backend/data/sfia/` — kể cả khi file nằm trong thư mục con theo ngôn ngữ mà bản tải về
+   tự giải nén ra (`SFIA 9 Excel - English/...`, `SFIA 9 Excel - Deutsch/...`, ...): loader quét cả
+   thư mục gốc và một cấp thư mục con, ưu tiên xác định bản `English` khi có nhiều lựa chọn — không
+   bao giờ chọn ngẫu nhiên giữa các ngôn ngữ.
+4. Khởi động lại backend, hoặc gọi `POST /api/plan/data-status/reload` (hoặc
+   `POST /api/admin/sfia/reload`) với header `X-Admin-Token`.
 
 **Trên production (Render và tương tự):** filesystem của container là ephemeral — file copy tay sẽ
 mất sau mỗi cold start — và Dockerfile **cố tình không copy** file SFIA vào image vì image build từ
-repo công khai. Thay vào đó backend **tự tải lúc khởi động** khi thư mục trống:
+repo công khai. Thay vào đó backend **tự tải** từ nguồn cấu hình:
 
 | Biến | Ý nghĩa |
 |---|---|
 | `SFIA_DATA_DIR` | Nơi đặt/tải file. Mặc định `./data/sfia`, trên container là `/tmp/sfia`. |
-| `SFIA_SOURCE_URL` | URL tải workbook: pre-signed link từ R2/S3, hoặc URL có token. **Secret.** |
-| `SFIA_SOURCE_TOKEN` | Gửi kèm dạng `Authorization: Bearer`. Tuỳ chọn. **Secret.** |
+| `SFIA_SOURCE_URL` | URL tải workbook `.xlsx`. Nguồn mặc định được hướng dẫn là **GitHub private release asset** — xem mục vận hành ở dưới. **Secret.** |
+| `SFIA_SOURCE_TOKEN` | Gửi kèm dạng `Authorization: Bearer`, nhưng **chỉ tới host đã cấu hình** — không bao giờ chuyển tiếp sang host khác nếu nguồn redirect. Tuỳ chọn. **Secret.** |
+| `ADMIN_TOKEN` | Bảo vệ mọi hành động ghi lại dữ liệu tham chiếu: `/api/admin/sfia/*` **và** `POST /api/plan/data-status/reload`. Chưa đặt thì các endpoint này từ chối tất cả. |
 
-File được ghi ra `.part` rồi mới đổi tên — kết nối đứt giữa chừng không để lại file cụt khiến
-parser báo lỗi sai ở mọi lần khởi động sau. URL và token **không bao giờ vào log**.
+Khi nào backend mới thực sự tải lại từ nguồn:
 
-Endpoint admin (`X-Admin-Token`, xem `ADMIN_TOKEN`):
+- **Khởi động (start-up):** chỉ tải nếu **chưa có workbook cục bộ nào đọc được** — file đang có sẵn
+  thì được dùng nguyên, không gọi ra ngoài.
+- **Reload thủ công** (`/api/plan/data-status/reload` hoặc `/api/admin/sfia/reload`): nếu
+  `SFIA_SOURCE_URL` đã cấu hình thì **luôn tải lại**, dù thư mục cục bộ đang có file hợp lệ — vì
+  "reload" từ một operator có nghĩa là "lấy bản mới nhất", không phải "xác nhận lại file đang có".
+  Không cấu hình `SFIA_SOURCE_URL` thì reload đọc từ file cục bộ như bình thường.
+
+File tải về được ghi vào file tạm rồi **được validate bằng đúng parser đọc SFIA** (mở được như một
+workbook thật và có ít nhất một dòng SFIA nhận ra được) trước khi thay thế file đang dùng — một
+trang HTML đăng nhập hay JSON lỗi không mở được như workbook nên bị loại ngay, không bao giờ được
+lưu thành "workbook". Tải/parse thất bại thì **giữ nguyên** file, taxonomy và index tốt trước đó;
+lỗi được ghi nhận và hiển thị ở panel *Sources & data* (đã lọc bỏ URL/token) chứ không làm mất dữ
+liệu đang chạy tốt. Kết nối đứt giữa chừng, redirect sang host khác, hay response vượt quá 25 MB
+đều bị chặn bằng cùng cơ chế đó. Một lock nội bộ đảm bảo không có hai lượt tải/reload nào chạy chồng
+lên nhau. URL và token **không bao giờ vào log hay vào response API**.
+
+Endpoint admin (`X-Admin-Token`, xem `ADMIN_TOKEN`) — tuỳ chọn, chỉ phục vụ dev hoặc khôi phục tạm
+thời cho instance đang chạy:
 
 ```bash
 curl -X POST -H "X-Admin-Token: $ADMIN_TOKEN" -F "file=@sfia-9.xlsx" \
   http://localhost:8080/api/admin/sfia/upload
 ```
 
-Hữu ích để sửa nhanh không cần redeploy, nhưng **không phải** đường bền vững trên container
-ephemeral — nó ghi vào filesystem, mất khi cold start. `SFIA_SOURCE_URL` mới là thứ sống sót.
-Chưa đặt `ADMIN_TOKEN` thì các endpoint admin **từ chối tất cả**, không mở toang.
+File tải lên chỉ được lưu trên filesystem của **instance hiện tại**, và cũng được validate trước khi
+thay file đang dùng — không phải đường bền vững trên container ephemeral: nó có thể mất khi restart,
+redeploy, hoặc instance được tái tạo sau khi ngủ. `SFIA_SOURCE_URL` mới là thứ sống sót qua những
+việc đó, và lần reload nguồn tiếp theo sẽ thay file upload tạm này bằng bản từ nguồn đó. Chưa đặt
+`ADMIN_TOKEN` thì các endpoint admin **từ chối tất cả**, không mở toang.
+
+**Vận hành nguồn GitHub private release (mặc định được hướng dẫn):**
+
+1. Xác nhận repository sẽ lưu asset thực sự **private** — đừng giả định repo hiện tại đã private.
+2. Tạo một **Release** trong repo đó, tải workbook SFIA 9 bản English (`.xlsx`) lên làm asset của
+   release.
+3. Lấy **asset ID** (xem trong phần API của release, hoặc qua `gh api`), dùng đúng dạng URL REST
+   API của GitHub cho asset — **không dùng** URL trang release hay link tải trên trình duyệt:
+   ```
+   https://api.github.com/repos/<owner>/<repo>/releases/assets/<asset_id>
+   ```
+   Backend gửi kèm `Authorization: Bearer <SFIA_SOURCE_TOKEN>` và
+   `Accept: application/octet-stream` — đúng theo tài liệu GitHub cho tải private release asset.
+   GitHub có thể trả redirect tới một host tải file khác; backend theo được redirect đó nhưng
+   **không** gửi lại `Authorization` sang host khác.
+4. Tạo một **fine-grained personal access token** giới hạn đúng repository đó, quyền đọc tối
+   thiểu cần thiết (Contents: Read-only là đủ). Nếu tổ chức có yêu cầu phê duyệt token, xin phê
+   duyệt trước khi dùng.
+5. Đặt `SFIA_SOURCE_URL` (URL ở bước 3) và `SFIA_SOURCE_TOKEN` (token ở bước 4) trong Render
+   Environment cho service backend.
+6. Khởi động lại service, hoặc gọi endpoint reload có `X-Admin-Token`.
+7. Kiểm tra số skill, dataset version và trạng thái nguồn ở panel *Sources & data*
+   (`GET /api/plan/data-status`).
+
+PAT không hết hạn theo từng request như một pre-signed URL, nhưng vẫn có thể hết hạn hoặc bị thu
+hồi theo chính sách của bạn hoặc của tổ chức — khi đó tạo token mới và cập nhật lại
+`SFIA_SOURCE_TOKEN`. Khi thay workbook bằng một release asset mới, **asset ID có thể đổi** — cập
+nhật lại `SFIA_SOURCE_URL` rồi reload; đừng giả định việc tải file mới cùng tên sẽ giữ nguyên URL
+API cũ. Phương án lưu trữ khác (Cloudflare R2 + Worker kiểm tra token tĩnh, v.v.) chưa được triển
+khai trong repo này.
 
 **Khi không có file:** hệ thống vẫn chạy trên bộ từ vựng công nghệ đi kèm (66 mục trong
 `backend/src/main/resources/taxonomy/technology-extensions.json`), và **nói rõ** điều đó ở panel
