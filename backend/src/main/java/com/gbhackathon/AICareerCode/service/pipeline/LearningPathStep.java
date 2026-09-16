@@ -101,6 +101,7 @@ public class LearningPathStep {
                       "endWeek": 4,
                       "estimatedHours": 32,
                       "skills": ["skill taught in this phase"],
+                      "skillNodeIds": ["the graph node id for each skill taught, e.g. n3"],
                       "prerequisiteSkills": ["skill that must already be in place"],
                       "addressesGapIds": ["the exact gap id from the list above"],
                       "orderingRationale": "why these skills come now rather than earlier or later",
@@ -145,6 +146,11 @@ public class LearningPathStep {
                 Order
                 - Respect the required learning order above. A phase may not teach a skill whose
                   prerequisite is taught in a later phase.
+                - skillNodeIds must list the graph node id (n1, n2 ...) for every skill the phase
+                  teaches, copied exactly from the list above. This is how the prerequisite check
+                  is run, so a phase with no ids, or with an id that is not in the graph, is
+                  rejected. A skill the graph has no node for is fine in "skills" and simply has
+                  no id here.
 
                 Sources
                 - Cite only resourceKey values from the retrieved list. Any other key is rejected.
@@ -173,7 +179,7 @@ public class LearningPathStep {
                 goal.targetRole == null ? "professional" : goal.targetRole);
 
         return runner.run("learning-path", prompt, LearningPathDto.class,
-                path -> validate(path, gapLabelById.keySet(), resourceKeys, budget));
+                path -> validate(path, gapLabelById.keySet(), resourceKeys, budget, graph));
     }
 
     /** The derived order, written out with labels so the model can act on it. */
@@ -191,7 +197,9 @@ public class LearningPathStep {
             if (node == null) {
                 continue;
             }
-            sb.append(position++).append(". ").append(node.label)
+            // The id is printed because the phases reference nodes by id, not by name: two model
+            // calls writing the same skill in two different wordings is the failure this avoids.
+            sb.append(position++).append(". [").append(node.id).append("] ").append(node.label)
                     .append(" (").append(node.kind == null ? "?" : node.kind).append(")\n");
         }
         if (graph.brokenCycles != null && !graph.brokenCycles.isEmpty()) {
@@ -202,7 +210,7 @@ public class LearningPathStep {
 
     // Package-private so the rules can be exercised directly in tests, without a model call.
     List<String> validate(LearningPathDto path, Set<String> gapIds,
-                                  Set<String> resourceKeys, int budget) {
+                          Set<String> resourceKeys, int budget, SkillGraphDto graph) {
         List<String> problems = new ArrayList<>();
 
         if (path.phases == null || path.phases.isEmpty()) {
@@ -220,6 +228,23 @@ public class LearningPathStep {
         int expectedOrder = 1;
         int previousEndWeek = 0;
         Set<String> skillsTaughtSoFar = new LinkedHashSet<>();
+
+        // The graph, indexed for the prerequisite check below. Until this existed the graph was
+        // computed, printed into the prompt as a suggestion, and then never enforced - so a plan
+        // that ignored it was accepted, and the ordering step was decoration.
+        Map<String, SkillGraphDto.Node> nodesById = new HashMap<>();
+        Map<String, List<String>> prerequisitesOf = new HashMap<>();
+        if (graph != null && graph.nodes != null) {
+            graph.nodes.forEach(node -> nodesById.put(node.id, node));
+            if (graph.edges != null) {
+                for (SkillGraphDto.Edge edge : graph.edges) {
+                    if (SkillGraphDto.RELATION_PREREQUISITE.equals(edge.relation)) {
+                        prerequisitesOf.computeIfAbsent(edge.to, key -> new ArrayList<>()).add(edge.from);
+                    }
+                }
+            }
+        }
+        Set<String> nodesTaughtSoFar = new LinkedHashSet<>();
 
         for (LearningPathDto.Phase phase : path.phases) {
             if (phase == null || isBlank(phase.title)) {
@@ -299,9 +324,45 @@ public class LearningPathStep {
                 }
             }
 
-            // Prerequisite ordering: a skill named as a prerequisite must have been taught in an
-            // earlier phase, or be something the student already has. The latter cannot be checked
-            // from here, so only a prerequisite that IS taught later is an error.
+            // The graph check. This is what turns the topological sort from a hint in the prompt
+            // into a constraint the plan has to satisfy.
+            if (!nodesById.isEmpty()) {
+                if (phase.skillNodeIds == null || phase.skillNodeIds.isEmpty()) {
+                    problems.add("Phase '" + phase.title + "' has no skillNodeIds. List the graph "
+                            + "node id for every skill it teaches, copied exactly from the learning "
+                            + "order above; the prerequisite check cannot run without them.");
+                } else {
+                    for (String nodeId : phase.skillNodeIds) {
+                        SkillGraphDto.Node node = nodesById.get(nodeId);
+                        if (node == null) {
+                            problems.add("Phase '" + phase.title + "' references graph node '" + nodeId
+                                    + "', which does not exist. Use the ids shown in the learning order.");
+                            continue;
+                        }
+                        for (String prerequisiteId : prerequisitesOf.getOrDefault(nodeId, List.of())) {
+                            SkillGraphDto.Node prerequisite = nodesById.get(prerequisiteId);
+                            if (prerequisite == null
+                                    // A CURRENT node is something the profile already evidences, so
+                                    // the plan is not expected to teach it and its absence here is
+                                    // correct rather than an ordering mistake.
+                                    || SkillGraphDto.KIND_CURRENT.equals(prerequisite.kind)
+                                    || nodesTaughtSoFar.contains(prerequisiteId)) {
+                                continue;
+                            }
+                            problems.add("Phase '" + phase.title + "' teaches '" + node.label
+                                    + "', but the graph says '" + prerequisite.label + "' must come "
+                                    + "first and no earlier phase teaches it. Move '" + prerequisite.label
+                                    + "' into an earlier phase, or teach it in this one.");
+                        }
+                    }
+                    nodesTaughtSoFar.addAll(phase.skillNodeIds);
+                }
+            }
+
+            // Prerequisite ordering by label, kept alongside the id check above because a phase may
+            // legitimately name a prerequisite the graph has no node for. A skill the student is
+            // assumed to already have cannot be checked from here, so only a prerequisite that IS
+            // taught later is an error.
             if (phase.prerequisiteSkills != null) {
                 for (String prerequisite : phase.prerequisiteSkills) {
                     if (prerequisite == null || skillsTaughtSoFar.contains(normalise(prerequisite))) {

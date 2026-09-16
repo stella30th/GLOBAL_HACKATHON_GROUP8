@@ -105,7 +105,7 @@ public class LearningSnapshotService {
      * @throws com.gbhackathon.AICareerCode.service.ai.AiInvalidResponseException if the model could
      *         not produce a valid result even after correction
      */
-    public LearningPlanDto generate(UserProfile profile) {
+    public LearningPlanDto generate(UserProfile profile, boolean force) {
         CareerGoalDto goal = profileService.goalOf(profile);
         if (goal == null) {
             throw new IllegalStateException("A career goal is required before a plan can be generated.");
@@ -113,16 +113,17 @@ public class LearningSnapshotService {
         String revision = ProfileService.profileKey(profile);
         String goalKey = goal.key();
 
-        String superseded = store.rawSnapshot(profile);
-        if (superseded != null && !superseded.isBlank() && store.read(profile, revision, goalKey).isEmpty()) {
-            // Clear exactly the content this request read, so a concurrent generation that has
-            // already stored a good plan is not thrown away by this one.
-            store.invalidate(profile.getId(), superseded);
-        }
+        // Nothing is cleared before the pipeline runs. An earlier version invalidated the stored
+        // snapshot first, so a pipeline failure destroyed a plan the student was working through -
+        // and it was not even necessary: store.read() already refuses to serve a snapshot whose
+        // revision or goal no longer matches, so an out-of-date row is invisible without being
+        // deleted. Leaving it also means switching back to a previous goal finds the plan that was
+        // built for it. A successful run overwrites it in store().
 
         LearningPlanDto plan = pipeline.generate(profile, goal);
-        log.info("Storing a new plan for profile {} (revision {})", profile.getId(), revision);
-        return store.store(profile.getId(), revision, goalKey, plan);
+        log.info("Storing a new plan for profile {} (revision {}, force={})",
+                profile.getId(), revision, force);
+        return store.store(profile.getId(), revision, goalKey, plan, force);
     }
 
     /** Ticks or unticks one phase, activity or completion criterion. */

@@ -10,3 +10,10 @@ spring:
     database-platform: org.hibernate.dialect.H2Dialect
     hibernate:
       ddl-auto: update
+
+app:
+  session:
+    # Local development runs over plain HTTP through the Vite proxy, which makes the API call
+    # same-origin. A Secure/SameSite=None cookie would simply be dropped there.
+    cookie-secure: false
+    cookie-same-site: Lax

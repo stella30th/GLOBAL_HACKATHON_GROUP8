@@ -16,6 +16,12 @@ import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
 import java.io.InputStream;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.file.StandardCopyOption;
+import java.time.Duration;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -54,6 +60,26 @@ public class SfiaTaxonomyLoader {
     @Value("${taxonomy.sfia.directory:./data/sfia}")
     private String directory;
 
+    /**
+     * Where to fetch the workbook when the directory is empty.
+     *
+     * <p>This exists because of two constraints that meet awkwardly. SFIA is licensed, so the file
+     * may not be committed or baked into a public image; and the container filesystem is
+     * ephemeral, so a file copied in by hand is gone at the next cold start. Fetching it at
+     * start-up from private storage the operator controls satisfies both: nothing licensed lives
+     * in the repository or the image, and every container has the framework a few seconds after
+     * boot. Local development ignores this entirely - a file already in the directory wins.
+     */
+    @Value("${taxonomy.sfia.source-url:}")
+    private String sourceUrl;
+
+    /** Sent as {@code Authorization: Bearer ...} when set. Never logged. */
+    @Value("${taxonomy.sfia.source-token:}")
+    private String sourceToken;
+
+    @Value("${taxonomy.sfia.download-timeout-seconds:60}")
+    private int downloadTimeoutSeconds;
+
     private static final Pattern LEVEL_HEADER = Pattern.compile("level\\s*([1-7])");
 
     private final TaxonomyStore store;
@@ -89,27 +115,24 @@ public class SfiaTaxonomyLoader {
      */
     public int load() {
         Path folder = Paths.get(directory);
-        if (!Files.isDirectory(folder)) {
-            unavailableReason = "No SFIA data directory at " + folder.toAbsolutePath()
-                    + ". Download the SFIA 9 skill descriptions workbook from sfia-online.org and place the .xlsx there.";
-            log.info("{}", unavailableReason);
+        if (!Files.isDirectory(folder) && !createDirectory(folder)) {
             return 0;
         }
 
-        List<Path> candidates = new ArrayList<>();
-        try (DirectoryStream<Path> stream = Files.newDirectoryStream(folder, "*.xlsx")) {
-            stream.forEach(candidates::add);
-        } catch (Exception e) {
-            unavailableReason = "Could not list " + folder.toAbsolutePath() + ": " + e.getMessage();
-            return 0;
+        List<Path> candidates = listWorkbooks(folder);
+        if (candidates.isEmpty()) {
+            // Nothing on disk. On a container with an ephemeral filesystem that is the normal
+            // state of every cold start, so this is the point where the configured source is used.
+            fetchFromSource(folder);
+            candidates = listWorkbooks(folder);
         }
-        // Temporary files Excel leaves behind when the workbook is open would otherwise be parsed
-        // first and fail in a way that looks like a bad download.
-        candidates.removeIf(p -> p.getFileName().toString().startsWith("~$"));
 
         if (candidates.isEmpty()) {
             unavailableReason = "No .xlsx file in " + folder.toAbsolutePath()
-                    + ". Download the SFIA 9 skill descriptions workbook from sfia-online.org and place it there.";
+                    + (sourceUrl == null || sourceUrl.isBlank()
+                    ? ". Download the SFIA 9 skill descriptions workbook from sfia-online.org and place it there, "
+                    + "or set SFIA_SOURCE_URL so it can be fetched at start-up."
+                    : ", and the configured SFIA_SOURCE_URL did not provide one.");
             log.info("{}", unavailableReason);
             return 0;
         }
@@ -131,6 +154,109 @@ public class SfiaTaxonomyLoader {
             }
         }
         return 0;
+    }
+
+    private boolean createDirectory(Path folder) {
+        try {
+            Files.createDirectories(folder);
+            return true;
+        } catch (Exception e) {
+            unavailableReason = "Could not create the SFIA data directory at "
+                    + folder.toAbsolutePath() + ": " + e.getMessage();
+            log.warn("{}", unavailableReason);
+            return false;
+        }
+    }
+
+    private List<Path> listWorkbooks(Path folder) {
+        List<Path> candidates = new ArrayList<>();
+        try (DirectoryStream<Path> stream = Files.newDirectoryStream(folder, "*.xlsx")) {
+            stream.forEach(candidates::add);
+        } catch (Exception e) {
+            unavailableReason = "Could not list " + folder.toAbsolutePath() + ": " + e.getMessage();
+            return List.of();
+        }
+        // Temporary files Excel leaves behind when the workbook is open would otherwise be parsed
+        // first and fail in a way that looks like a bad download.
+        candidates.removeIf(p -> p.getFileName().toString().startsWith("~$"));
+        return candidates;
+    }
+
+    /**
+     * Downloads the workbook from the configured private source.
+     *
+     * <p>Written to a temporary name and moved into place only once the whole body has arrived, so
+     * a connection cut halfway cannot leave a truncated file that the parser then rejects on every
+     * subsequent start with a misleading "could not parse" message.
+     *
+     * <p>Failure here is not fatal. The application starts, the taxonomy reports itself missing,
+     * and the data panel says so - which is the same honest state as a deployment that never
+     * configured a source at all.
+     */
+    private void fetchFromSource(Path folder) {
+        if (sourceUrl == null || sourceUrl.isBlank()) {
+            return;
+        }
+
+        Path temporary = folder.resolve("sfia-download.part");
+        Path destination = folder.resolve("sfia-9-skills.xlsx");
+        try {
+            HttpClient client = HttpClient.newBuilder()
+                    .connectTimeout(Duration.ofSeconds(15))
+                    .followRedirects(HttpClient.Redirect.NORMAL)
+                    .build();
+
+            HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create(sourceUrl.trim()))
+                    .GET()
+                    .timeout(Duration.ofSeconds(downloadTimeoutSeconds));
+            if (sourceToken != null && !sourceToken.isBlank()) {
+                builder.header("Authorization", "Bearer " + sourceToken.trim());
+            }
+
+            log.info("Fetching the SFIA workbook from the configured source");
+            HttpResponse<Path> response = client.send(builder.build(),
+                    HttpResponse.BodyHandlers.ofFile(temporary));
+
+            if (response.statusCode() >= 400) {
+                // The URL is not logged: a pre-signed link carries its own credentials in the query
+                // string, and the token never appears anywhere.
+                unavailableReason = "The SFIA source returned HTTP " + response.statusCode() + ".";
+                log.warn("{}", unavailableReason);
+                Files.deleteIfExists(temporary);
+                return;
+            }
+            if (Files.size(temporary) == 0) {
+                unavailableReason = "The SFIA source returned an empty file.";
+                log.warn("{}", unavailableReason);
+                Files.deleteIfExists(temporary);
+                return;
+            }
+
+            Files.move(temporary, destination, StandardCopyOption.REPLACE_EXISTING);
+            log.info("Fetched the SFIA workbook ({} bytes)", Files.size(destination));
+        } catch (Exception e) {
+            unavailableReason = "Could not fetch the SFIA workbook: "
+                    + e.getClass().getSimpleName() + " - " + e.getMessage();
+            log.warn("{}", unavailableReason);
+            try {
+                Files.deleteIfExists(temporary);
+            } catch (Exception ignored) {
+                // Nothing further to do; the next start will overwrite it.
+            }
+        }
+    }
+
+    /**
+     * Stores a workbook an operator uploaded through the admin endpoint, replacing whatever is
+     * there. Returns the path it was written to.
+     */
+    public Path storeUploadedWorkbook(byte[] content) throws java.io.IOException {
+        Path folder = Paths.get(directory);
+        Files.createDirectories(folder);
+        Path destination = folder.resolve("sfia-9-skills.xlsx");
+        Files.write(destination, content);
+        log.info("Stored an uploaded SFIA workbook ({} bytes)", content.length);
+        return destination;
     }
 
     /**

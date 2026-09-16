@@ -93,11 +93,20 @@ export function setCustomBackendUrl(url) {
   }
 }
 
+/**
+ * Every request in the app goes through here, which is why the session cookie is attached here
+ * and nowhere else.
+ *
+ * `credentials: 'include'` is required because the deployed frontend and the API are different
+ * origins: without it the browser sends no cookie, the server issues a fresh session on every
+ * request, and each call gets a brand-new empty profile. There is no login, so this cookie is the
+ * only thing that keeps one person's CV separate from another's.
+ */
 async function fetchWithTimeout(url, options = {}, timeoutMs = DEFAULT_TIMEOUT_MS) {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    return await fetch(url, { ...options, signal: controller.signal });
+    return await fetch(url, { ...options, credentials: 'include', signal: controller.signal });
   } finally {
     clearTimeout(id);
   }
@@ -281,12 +290,21 @@ export async function fetchPlan() {
   return res.json();
 }
 
-/** Runs the pipeline. Minutes, not seconds - the caller shows a real progress state. */
-export async function generatePlan() {
-  const res = await fetchWithTimeout(`${getApiBase()}/plan/generate`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-  }, PLAN_TIMEOUT_MS);
+/**
+ * Runs the pipeline. Minutes, not seconds - the caller shows a real progress state.
+ *
+ * Pass `force` only when the user deliberately asked to rebuild a plan they already have. Without
+ * it the server converges on the stored plan when nothing has changed, which is what two tabs
+ * generating at once should do; with it, four model calls produce a replacement. It spends real
+ * quota either way, so the distinction is the user's to make, not a default.
+ */
+export async function generatePlan({ force = false } = {}) {
+  const res = await fetchWithTimeout(
+    `${getApiBase()}/plan/generate${force ? '?force=true' : ''}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    }, PLAN_TIMEOUT_MS);
   if (!res.ok) throw await toError(res, 'Could not build your plan');
   return res.json();
 }

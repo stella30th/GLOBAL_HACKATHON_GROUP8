@@ -8,6 +8,8 @@ import com.gbhackathon.AICareerCode.service.ai.AiUnavailableException;
 import com.gbhackathon.AICareerCode.service.ai.GeminiClient;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import com.gbhackathon.AICareerCode.config.SessionIdFilter;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.LinkedHashMap;
@@ -22,7 +24,6 @@ import java.util.Map;
  */
 @RestController
 @RequestMapping("/api/coach")
-@CrossOrigin(origins = "*")
 public class CoachController {
 
     private final ProfileService profileService;
@@ -57,8 +58,9 @@ public class CoachController {
     }
 
     @PostMapping("/chat")
-    public ResponseEntity<Map<String, Object>> chat(@RequestBody ChatRequest request) {
-        UserProfile profile = profileService.getCurrentOrCreateProfile();
+    public ResponseEntity<Map<String, Object>> chat(HttpServletRequest httpRequest,
+                                                    @RequestBody ChatRequest request) {
+        UserProfile profile = profileService.getCurrentOrCreateProfile(SessionIdFilter.require(httpRequest));
         String question = request.getMessage() != null ? request.getMessage().trim() : "";
         if (question.isEmpty()) {
             return ResponseEntity.badRequest().body(Map.of("error", "Please enter a question."));

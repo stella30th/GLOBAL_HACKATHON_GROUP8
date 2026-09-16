@@ -151,11 +151,16 @@ export default function App() {
     refreshPlan();
   }, [refreshPlan]);
 
-  const handleGenerate = useCallback(async () => {
+  /**
+   * `force` is passed only when the user asked to rebuild a plan they already have. The server
+   * otherwise converges on the stored one for unchanged inputs, which is right for two tabs
+   * generating at once and wrong for a deliberate rebuild.
+   */
+  const handleGenerate = useCallback(async ({ force = false } = {}) => {
     setGenerating(true);
     setPlanError(null);
     try {
-      const result = await generatePlan();
+      const result = await generatePlan({ force });
       setPlanState({
         plan: result.plan,
         completedItems: result.completedItems || [],
@@ -286,6 +291,7 @@ export default function App() {
             isConnected={isConnected}
             showToast={showToast}
             missingInputs={planState.missingInputs}
+            hasPlan={Boolean(planState.plan)}
           />
         </div>
 

@@ -59,8 +59,20 @@ public class LearningPathDto {
         public Integer endWeek;
         public Integer estimatedHours;
 
-        /** Skill labels taught in this phase. */
+        /** Skill labels taught in this phase, in the wording shown to the student. */
         public List<String> skills;
+
+        /**
+         * Ids of the knowledge-graph nodes this phase teaches.
+         *
+         * <p>Ids rather than labels, for the same reason {@link #addressesGapIds} uses ids. The
+         * graph is produced by one model call and the phases by another; matching them on skill
+         * names means comparing two independently written strings, and "REST API design" against
+         * "Designing REST APIs" silently defeats the prerequisite check that the whole graph step
+         * exists to enable. An id either matches a node or is rejected.
+         */
+        @JsonAlias({"nodeIds", "graphNodeIds"})
+        public List<String> skillNodeIds;
 
         /** Skills that must already be in place, drawn from the graph's prerequisite edges. */
         @JsonAlias({"prerequisites"})

@@ -37,6 +37,25 @@ spring:
       max-file-size: 10MB
       max-request-size: 10MB
 
+app:
+  session:
+    # The anonymous session cookie is the only thing separating one person's CV from another's.
+    # Secure + SameSite=None are required in the deployed setup, where the static frontend and the
+    # API are different origins and the browser attaches no cross-site cookie without both. The
+    # local profile turns them off, because plain-HTTP development would otherwise get no cookie.
+    cookie-secure: ${APP_SESSION_COOKIE_SECURE:true}
+    cookie-same-site: ${APP_SESSION_COOKIE_SAME_SITE:None}
+    cookie-max-age-days: ${APP_SESSION_COOKIE_MAX_AGE_DAYS:180}
+  cors:
+    # Explicit origins, not a wildcard: credentialed requests carry the session cookie, and
+    # reflecting whatever origin asks would let any page on the internet call this API as a
+    # visitor. Set APP_CORS_ALLOWED_ORIGINS to the deployed frontend origin.
+    allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:5173,http://127.0.0.1:5173}
+  admin:
+    # Shared secret for /api/admin/**, which writes reference data the whole deployment reads.
+    # Unset means those endpoints refuse everything rather than falling open.
+    token: ${ADMIN_TOKEN:}
+
 ai:
   gemini:
     api-key: ${GEMINI_API_KEY:}
@@ -67,6 +86,13 @@ taxonomy:
     # restart, or call POST /api/plan/data-status/reload. Until then the taxonomy runs on the
     # bundled technology vocabulary alone and says so in the data panel.
     directory: ${SFIA_DATA_DIR:./data/sfia}
+    # Fetched into that directory at start-up when it is empty. This is how a licensed file reaches
+    # an ephemeral container without being committed or baked into a public image: put the workbook
+    # in private object storage (Cloudflare R2, S3 or equivalent) and point this at a pre-signed or
+    # token-protected URL. Local development leaves both unset and uses the file already on disk.
+    source-url: ${SFIA_SOURCE_URL:}
+    source-token: ${SFIA_SOURCE_TOKEN:}
+    download-timeout-seconds: ${SFIA_DOWNLOAD_TIMEOUT_SECONDS:60}
 
 retrieval:
   # Checking a few hundred URLs adds a minute to start-up, which on a free tier is the whole boot

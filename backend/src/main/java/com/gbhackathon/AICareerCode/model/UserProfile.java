@@ -16,12 +16,32 @@ import java.util.stream.Collectors;
  * anything that still wants it; the application simply stops using them.
  */
 @Entity
-@Table(name = "user_profiles")
+@Table(name = "user_profiles", indexes = {
+        @Index(name = "idx_user_profiles_session", columnList = "sessionId", unique = true)
+})
 public class UserProfile {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    /**
+     * The anonymous browser session this profile belongs to.
+     *
+     * <p>Every request is scoped by this. Before it existed the application served whichever
+     * profile row had been written most recently, to everyone: two people using the site at the
+     * same time read each other's CV, and saving overwrote a stranger's work. There is no login,
+     * so this cookie value is the only thing separating one person's data from another's - which
+     * is why it is issued server-side, never accepted from a request body, and carried in an
+     * HttpOnly cookie that page scripts cannot read.
+     *
+     * <p>Mapped nullable, although every row this application writes has one. {@code ddl-auto:
+     * update} cannot add a NOT NULL column to a table that already has rows, and the upgrade path
+     * runs against exactly such a table; {@link com.gbhackathon.AICareerCode.config.LegacyProfilePurge}
+     * removes the session-less rows on start-up instead, and nothing creates another.
+     */
+    @Column(unique = true, length = 64)
+    private String sessionId;
 
     private String fullName;
     private String email;
@@ -153,6 +173,14 @@ public class UserProfile {
 
     public void setId(Long id) {
         this.id = id;
+    }
+
+    public String getSessionId() {
+        return sessionId;
+    }
+
+    public void setSessionId(String sessionId) {
+        this.sessionId = sessionId;
     }
 
     public String getFullName() {

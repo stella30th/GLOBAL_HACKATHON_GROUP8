@@ -54,7 +54,8 @@ export default function PlanWorkspace({
               Your existing path below is unchanged — it is the one generated before this attempt.
             </p>
             {error.retryable !== false && (
-              <button type="button" className="link-btn" onClick={onRetry} disabled={!isConnected}>
+              <button type="button" className="link-btn"
+                      onClick={() => onRetry({ force: true })} disabled={!isConnected}>
                 Try again
               </button>
             )}
@@ -205,7 +206,8 @@ function ErrorState({ error, onRetry, isConnected }) {
         here is generated for you, or it is not there at all.
       </p>
       {error.retryable !== false && (
-        <button type="button" className="btn btn-primary" onClick={onRetry} disabled={!isConnected}>
+        <button type="button" className="btn btn-primary"
+                onClick={() => onRetry({ force: false })} disabled={!isConnected}>
           <RefreshCw size={15} /> Try again
         </button>
       )}

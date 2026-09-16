@@ -131,7 +131,8 @@ public class LearningSnapshotStore {
      *         the plan was being generated
      */
     @Transactional
-    public LearningPlanDto store(Long profileId, String revision, String goalKey, LearningPlanDto plan) {
+    public LearningPlanDto store(Long profileId, String revision, String goalKey,
+                                 LearningPlanDto plan, boolean force) {
         UserProfile fresh = profileRepository.findByIdForUpdate(profileId).orElseThrow(() ->
                 new LearningSnapshotService.StaleProfileRevisionException("The profile no longer exists."));
 
@@ -141,9 +142,18 @@ public class LearningSnapshotStore {
                             + "get a plan for the profile you have now.");
         }
 
-        Optional<LearningPlanDto> alreadyStored = read(fresh, revision, goalKey);
-        if (alreadyStored.isPresent()) {
-            return alreadyStored.get();
+        // Converging on an existing snapshot is right for two tabs generating at once: both end up
+        // with the same phase ids and the second run's result is redundant. It is wrong when the
+        // student pressed "generate again" deliberately - four model calls were spent and the new
+        // plan would be silently discarded in favour of the one they were trying to replace.
+        // `force` is what tells the two situations apart.
+        if (!force) {
+            Optional<LearningPlanDto> alreadyStored = read(fresh, revision, goalKey);
+            if (alreadyStored.isPresent()) {
+                log.info("A plan for this revision and goal already exists; keeping it and "
+                        + "discarding the concurrently generated one");
+                return alreadyStored.get();
+            }
         }
 
         try {

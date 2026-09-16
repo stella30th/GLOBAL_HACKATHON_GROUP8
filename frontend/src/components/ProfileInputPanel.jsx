@@ -54,7 +54,7 @@ function goalFrom(profile) {
  * button says which piece is still missing rather than failing after a minute of work.
  */
 export default function ProfileInputPanel({
-  profile, setProfile, onGenerate, generating, isConnected, showToast, missingInputs,
+  profile, setProfile, onGenerate, generating, isConnected, showToast, missingInputs, hasPlan,
 }) {
   const [mode, setMode] = useState('upload');
   const [uploading, setUploading] = useState(false);
@@ -150,7 +150,9 @@ export default function ProfileInputPanel({
       planHoursPerWeek: Number(goal.planHoursPerWeek),
     });
     if (saved) {
-      onGenerate();
+      // Rebuilding something that already exists has to say so, or the server hands back the
+      // stored plan and four model calls are spent for nothing.
+      onGenerate({ force: hasPlan });
     }
   };
 
@@ -484,8 +486,19 @@ export default function ProfileInputPanel({
         >
           {generating
             ? <><Loader2 className="animate-spin" size={17} /> Building your path…</>
-            : <><Sparkles size={17} /> Build my learning path</>}
+            : hasPlan
+              ? <><Sparkles size={17} /> Rebuild my learning path</>
+              : <><Sparkles size={17} /> Build my learning path</>}
         </button>
+
+        {/* Said before the click, not after. Generation is four model calls against a per-day
+            quota, and a student who only wanted to change a typo should know that. */}
+        {hasPlan && !generating && (
+          <p className="generate-hint">
+            This replaces the path you have now, including anything you have ticked off. It runs
+            the full analysis again, which uses part of the daily AI quota.
+          </p>
+        )}
 
         {!canGenerate && !generating && (
           <p className="generate-hint">

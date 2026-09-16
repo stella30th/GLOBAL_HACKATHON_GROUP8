@@ -23,6 +23,13 @@ class TaxonomyMappingStepTest {
 
     private final TaxonomyMappingStep step = new TaxonomyMappingStep(null);
 
+    /** Stands in for the profile a quotation has to be found in. */
+    private static final String CORPUS = """
+            Khoa Pham. Final-year software engineering student.
+            Capstone: built a booking UI in React and a Spring Boot service behind it.
+            Java, Spring Boot, React, PostgreSQL.
+            """;
+
     private static TaxonomySkill skill(String code, String name, String source) {
         TaxonomySkill s = new TaxonomySkill();
         s.setCode(code);
@@ -53,7 +60,7 @@ class TaxonomyMappingStepTest {
         TaxonomyMappingStep.Result result = validResult();
         result.profileEvidence.get(0).taxonomyCode = "DTAN";
 
-        List<String> problems = step.validate(result, retrieved(), goal(null));
+        List<String> problems = step.validate(result, retrieved(), goal(null), CORPUS);
 
         assertTrue(problems.stream().anyMatch(p -> p.contains("DTAN")), problems.toString());
     }
@@ -69,7 +76,7 @@ class TaxonomyMappingStepTest {
         result.profileEvidence.get(0).evidenceStatus = SkillEvidenceDto.HAS_EVIDENCE;
         result.profileEvidence.get(0).evidenceQuotes = List.of();
 
-        List<String> problems = step.validate(result, retrieved(), goal(null));
+        List<String> problems = step.validate(result, retrieved(), goal(null), CORPUS);
 
         assertTrue(problems.stream().anyMatch(p -> p.contains("quotes")), problems.toString());
     }
@@ -84,7 +91,7 @@ class TaxonomyMappingStepTest {
         result.profileEvidence.get(0).assessedLevel = 4;
         result.profileEvidence.get(0).levelBasis = null;
 
-        List<String> problems = step.validate(result, retrieved(), goal(null));
+        List<String> problems = step.validate(result, retrieved(), goal(null), CORPUS);
 
         assertTrue(problems.stream().anyMatch(p -> p.contains("levelBasis")), problems.toString());
     }
@@ -95,7 +102,7 @@ class TaxonomyMappingStepTest {
         result.profileEvidence.get(0).assessedLevel = 9;
         result.profileEvidence.get(0).levelBasis = "led a team";
 
-        List<String> problems = step.validate(result, retrieved(), goal(null));
+        List<String> problems = step.validate(result, retrieved(), goal(null), CORPUS);
 
         assertTrue(problems.stream().anyMatch(p -> p.contains("between 1 and 7")), problems.toString());
     }
@@ -109,20 +116,97 @@ class TaxonomyMappingStepTest {
         TaxonomyMappingStep.Result result = validResult();
         result.targetRequirements.get(0).sourceType = TargetRequirementDto.SOURCE_JOB_DESCRIPTION;
 
-        List<String> problems = step.validate(result, retrieved(), goal(null));
+        List<String> problems = step.validate(result, retrieved(), goal(null), CORPUS);
 
         assertTrue(problems.stream().anyMatch(p -> p.contains("no job description was supplied")),
                 problems.toString());
     }
 
     @Test
-    void allowsAJobDescriptionSourceWhenOneWasGiven() {
+    void allowsAJobDescriptionSourceWhenTheAdvertReallySaysIt() {
         TaxonomyMappingStep.Result result = validResult();
         result.targetRequirements.get(0).sourceType = TargetRequirementDto.SOURCE_JOB_DESCRIPTION;
+        result.targetRequirements.get(0).sourceNote = "solid Java and Spring Boot experience";
 
-        List<String> problems = step.validate(result, retrieved(), goal("We need someone who ..."));
+        List<String> problems = step.validate(result, retrieved(),
+                goal("You will need solid Java and Spring Boot experience."), CORPUS);
 
         assertTrue(problems.isEmpty(), problems.toString());
+    }
+
+    /**
+     * "The advert says so" is the label a student uses to decide how much weight a requirement
+     * deserves. It has to mean the advert actually says so, not that it plausibly might have.
+     */
+    @Test
+    void rejectsAJobDescriptionSourceThatTheAdvertDoesNotContain() {
+        TaxonomyMappingStep.Result result = validResult();
+        result.targetRequirements.get(0).sourceType = TargetRequirementDto.SOURCE_JOB_DESCRIPTION;
+        result.targetRequirements.get(0).sourceNote = "must have five years of Kubernetes in production";
+
+        List<String> problems = step.validate(result, retrieved(),
+                goal("You will need solid Java and Spring Boot experience."), CORPUS);
+
+        assertTrue(problems.stream().anyMatch(p -> p.contains("does not appear in the job description")),
+                problems.toString());
+    }
+
+    // ---- verbatim evidence ----
+
+    /**
+     * The check the whole evidence model rests on. A model told that every claim needs supporting
+     * text will produce supporting text, and a paraphrase reads exactly like a quotation.
+     */
+    @Test
+    void rejectsAQuoteThatIsNotInTheProfile() {
+        TaxonomyMappingStep.Result result = validResult();
+        result.profileEvidence.get(0).evidenceQuotes =
+                List.of("led a team of engineers delivering a payments platform");
+
+        List<String> problems = step.validate(result, retrieved(), goal(null), CORPUS);
+
+        assertTrue(problems.stream().anyMatch(p -> p.contains("does not appear in the")),
+                problems.toString());
+    }
+
+    /**
+     * PDF extraction breaks lines mid-sentence and swaps typographic characters. None of that is
+     * the model inventing anything, so none of it may fail the check.
+     */
+    @Test
+    void acceptsAQuoteWhoseOnlyDifferenceIsWhitespaceOrCase() {
+        TaxonomyMappingStep.Result result = validResult();
+        result.profileEvidence.get(0).evidenceQuotes =
+                List.of("Built   a booking UI\nin React");
+
+        assertTrue(step.validate(result, retrieved(), goal(null), CORPUS).isEmpty());
+    }
+
+    /**
+     * A four-character quote matches almost any document by accident, so checking it proves
+     * nothing while rejecting it would fail honest entries.
+     */
+    @Test
+    void doesNotCheckQuotesTooShortToMeanAnything() {
+        TaxonomyMappingStep.Result result = validResult();
+        result.profileEvidence.get(0).evidenceQuotes = List.of("Rust");
+
+        assertTrue(step.validate(result, retrieved(), goal(null), CORPUS).isEmpty());
+    }
+
+    @Test
+    void buildsTheCorpusFromTheStoredFieldsAndTheRawCv() {
+        com.gbhackathon.AICareerCode.model.UserProfile profile =
+                new com.gbhackathon.AICareerCode.model.UserProfile();
+        profile.setSkillList(List.of("Verilog HDL"));
+        profile.setBio("Taped out a small design.");
+        profile.setRawCvText("Cadence Virtuoso, static timing analysis.");
+
+        String corpus = TaxonomyMappingStep.profileCorpus(profile);
+
+        assertTrue(corpus.contains("Verilog HDL"));
+        assertTrue(corpus.contains("Taped out a small design."));
+        assertTrue(corpus.contains("static timing analysis"));
     }
 
     @Test
@@ -130,14 +214,14 @@ class TaxonomyMappingStepTest {
         TaxonomyMappingStep.Result result = validResult();
         result.profileEvidence.get(0).evidenceStatus = "PROBABLY";
 
-        List<String> problems = step.validate(result, retrieved(), goal(null));
+        List<String> problems = step.validate(result, retrieved(), goal(null), CORPUS);
 
         assertTrue(problems.stream().anyMatch(p -> p.contains("evidenceStatus")), problems.toString());
     }
 
     @Test
     void acceptsAWellFormedResult() {
-        assertTrue(step.validate(validResult(), retrieved(), goal(null)).isEmpty());
+        assertTrue(step.validate(validResult(), retrieved(), goal(null), CORPUS).isEmpty());
     }
 
     /** The server, not the model, supplies the name and source, so the UI never has to join. */

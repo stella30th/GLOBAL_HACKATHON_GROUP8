@@ -12,6 +12,14 @@ import java.util.Optional;
 
 @Repository
 public interface UserProfileRepository extends JpaRepository<UserProfile, Long> {
+
+    /**
+     * The one row a request is allowed to see. Every read path goes through this: there is no
+     * "current profile" independent of who is asking, and reintroducing one would put a stranger's
+     * CV back on the page.
+     */
+    Optional<UserProfile> findBySessionId(String sessionId);
+
     Optional<UserProfile> findByEmail(String email);
 
     /**

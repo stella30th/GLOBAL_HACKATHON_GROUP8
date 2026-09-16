@@ -8,7 +8,6 @@ import com.gbhackathon.AICareerCode.model.UserProfile;
 import com.gbhackathon.AICareerCode.repository.UserProfileRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -61,25 +60,30 @@ public class ProfileService {
                 + (profile.getUpdatedAt() != null ? profile.getUpdatedAt().toString() : "new");
     }
 
+    /**
+     * The profile belonging to this browser session, created empty on first contact.
+     *
+     * <p>This used to take no argument. It returned whichever row had the newest {@code updatedAt}
+     * and deleted every other one, which meant a single profile shared by everyone using the
+     * deployment: the second visitor was shown the first visitor's CV, and saving anything
+     * destroyed their row. Scoping by session is the whole fix; the deletion is gone entirely,
+     * because rows belonging to other people were never this request's to remove.
+     */
     @Transactional
-    public UserProfile getCurrentOrCreateProfile() {
-        List<UserProfile> list = profileRepository.findAll(Sort.by(Sort.Direction.DESC, "updatedAt", "id"));
-        if (!list.isEmpty()) {
-            UserProfile latest = list.get(0);
-            if (list.size() > 1) {
-                for (int i = 1; i < list.size(); i++) {
-                    try {
-                        profileRepository.delete(list.get(i));
-                    } catch (Exception ignored) {
-                        // A row that cannot be removed is harmless; only the newest is ever served.
-                    }
-                }
-            }
-            return latest;
+    public UserProfile getCurrentOrCreateProfile(String sessionId) {
+        if (sessionId == null || sessionId.isBlank()) {
+            throw new IllegalArgumentException("A session id is required to read a profile.");
         }
+
+        Optional<UserProfile> existing = profileRepository.findBySessionId(sessionId);
+        if (existing.isPresent()) {
+            return existing.get();
+        }
+
         // A blank onboarding profile. An invented default profile would be analysed as though it
         // described the person sitting in front of it, producing a plan for someone who does not exist.
         UserProfile p = new UserProfile();
+        p.setSessionId(sessionId);
         p.setFullName("");
         p.setEmail("");
         p.setPhone("");
@@ -118,8 +122,8 @@ public class ProfileService {
      * </ul>
      */
     @Transactional
-    public UserProfile saveOrUpdateProfile(ProfileDto dto) {
-        UserProfile profile = getCurrentOrCreateProfile();
+    public UserProfile saveOrUpdateProfile(String sessionId, ProfileDto dto) {
+        UserProfile profile = getCurrentOrCreateProfile(sessionId);
         boolean profileChanged = applyEditableFields(profile, dto);
         boolean goalChanged = applyGoalFields(profile, dto);
 
@@ -165,8 +169,8 @@ public class ProfileService {
      * junior backend role in three months has not changed their mind by uploading a better CV.
      */
     @Transactional
-    public UserProfile replaceProfileFromCv(ProfileDto dto) {
-        return replaceProfile(dto, dto.getRawCvText());
+    public UserProfile replaceProfileFromCv(String sessionId, ProfileDto dto) {
+        return replaceProfile(sessionId, dto, dto.getRawCvText());
     }
 
     /**
@@ -174,8 +178,8 @@ public class ProfileService {
      * dropped: leaving it behind meant every prompt was still grounded in someone else's document.
      */
     @Transactional
-    public UserProfile replaceProfileFromSample(ProfileDto dto) {
-        UserProfile saved = replaceProfile(dto, null);
+    public UserProfile replaceProfileFromSample(String sessionId, ProfileDto dto) {
+        UserProfile saved = replaceProfile(sessionId, dto, null);
         // A sample carries its own goal so the demo can be generated in one click.
         if (dto.getTargetRole() != null) {
             saved.setTargetRole(dto.getTargetRole());
@@ -187,8 +191,8 @@ public class ProfileService {
         return saved;
     }
 
-    private UserProfile replaceProfile(ProfileDto dto, String rawCvText) {
-        UserProfile profile = getCurrentOrCreateProfile();
+    private UserProfile replaceProfile(String sessionId, ProfileDto dto, String rawCvText) {
+        UserProfile profile = getCurrentOrCreateProfile(sessionId);
 
         profile.setFullName(dto.getFullName());
         profile.setEmail(dto.getEmail());

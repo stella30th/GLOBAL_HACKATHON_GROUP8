@@ -13,6 +13,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import com.gbhackathon.AICareerCode.config.SessionIdFilter;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.LinkedHashMap;
@@ -29,7 +31,6 @@ import java.util.Optional;
  */
 @RestController
 @RequestMapping("/api/plan")
-@CrossOrigin(origins = "*")
 public class PlanController {
 
     private static final Logger log = LoggerFactory.getLogger(PlanController.class);
@@ -61,8 +62,8 @@ public class PlanController {
      * older plan exists that no longer matches the inputs.
      */
     @GetMapping
-    public ResponseEntity<Map<String, Object>> getCurrentPlan() {
-        UserProfile profile = profileService.getCurrentOrCreateProfile();
+    public ResponseEntity<Map<String, Object>> getCurrentPlan(HttpServletRequest request) {
+        UserProfile profile = profileService.getCurrentOrCreateProfile(SessionIdFilter.require(request));
         Optional<LearningPlanDto> plan = snapshotService.currentPlan(profile);
 
         Map<String, Object> body = new LinkedHashMap<>();
@@ -80,11 +81,19 @@ public class PlanController {
      *
      * <p>Every failure path returns an explanation and nothing else. There is no written-in-advance
      * plan behind this endpoint to fall back on, which is the point: content on this page is the
-     * model's work grounded in retrieved data, or it is absent and the student is told why.
+     * model's work grounded in retrieved data, or it is absent and the student is told why. A
+     * failure also leaves any previously stored plan exactly where it was.
+     *
+     * <p>{@code force=true} means the student asked for a rebuild of something that already
+     * exists. Without it, a second run for an unchanged profile and goal converges on the stored
+     * plan - correct when two tabs generate at once, wrong when someone deliberately pressed
+     * "generate again" and would have four model calls thrown away. It costs real quota, so the
+     * caller sets it only on an explicit rebuild.
      */
     @PostMapping("/generate")
-    public ResponseEntity<?> generatePlan() {
-        UserProfile profile = profileService.getCurrentOrCreateProfile();
+    public ResponseEntity<?> generatePlan(HttpServletRequest request,
+                                          @RequestParam(name = "force", defaultValue = "false") boolean force) {
+        UserProfile profile = profileService.getCurrentOrCreateProfile(SessionIdFilter.require(request));
 
         List<String> missing = profileService.missingPlanInputs(profile);
         if (!missing.isEmpty()) {
@@ -94,7 +103,7 @@ public class PlanController {
         }
 
         try {
-            LearningPlanDto plan = snapshotService.generate(profile);
+            LearningPlanDto plan = snapshotService.generate(profile, force);
             Map<String, Object> body = new LinkedHashMap<>();
             body.put("plan", plan);
             body.put("completedItems", List.of());
@@ -129,7 +138,8 @@ public class PlanController {
      * and leaves {@code updatedAt} alone. No AI is called.
      */
     @PatchMapping("/progress/{itemId}")
-    public ResponseEntity<?> updateProgress(@PathVariable("itemId") String itemId,
+    public ResponseEntity<?> updateProgress(HttpServletRequest httpRequest,
+                                            @PathVariable("itemId") String itemId,
                                             @RequestBody ProgressRequest request) {
         if (request == null || request.getPlanId() == null || request.getPlanId().isBlank()) {
             return ResponseEntity.badRequest().body(Map.of("error", "planId is required."));
@@ -141,7 +151,7 @@ public class PlanController {
             return ResponseEntity.badRequest().body(Map.of("error", "itemId is required."));
         }
 
-        UserProfile current = profileService.getCurrentOrCreateProfile();
+        UserProfile current = profileService.getCurrentOrCreateProfile(SessionIdFilter.require(httpRequest));
         try {
             UserProfile updated = snapshotService.updateProgress(
                     current.getId(), request.getPlanId(), itemId, request.getCompleted());

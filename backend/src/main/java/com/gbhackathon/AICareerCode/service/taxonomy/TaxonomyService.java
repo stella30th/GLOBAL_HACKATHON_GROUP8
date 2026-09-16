@@ -220,6 +220,12 @@ public class TaxonomyService {
         status.put("sfiaUnavailableReason", sfia > 0 ? null : sfiaLoader.getUnavailableReason());
         status.put("sfiaExpectedDirectory", sfiaLoader.getDirectory());
         status.put("extensionSkillCount", extensions);
+        // How many technology rows carry a SFIA code the loaded framework actually confirms. The
+        // suggested mapping in technology-extensions.json is this project's editorial guess; a low
+        // number here means most of those guesses are not real SFIA codes and the extension layer
+        // is standing on its own rather than on the framework. Worth seeing rather than assuming.
+        status.put("extensionsMappedToSfia", repository.findBySource(TaxonomySkill.SOURCE_EXTENSION)
+                .stream().filter(s -> s.getMappedSfiaCode() != null).count());
         return status;
     }
 

@@ -23,12 +23,27 @@ services:
         value: gemini-3.1-flash-lite
       - key: GEMINI_FALLBACK_MODEL
         value: gemini-3.5-flash
-      # Where the SFIA 9 workbook is read from. Render's filesystem is ephemeral, so loading SFIA
-      # in a deployment needs a persistent disk mounted here (or a build step that fetches it from
-      # storage you control). Without it the app runs on the bundled technology vocabulary and says
-      # so in the Sources & data panel.
+      # SFIA is licensed content, so it is neither committed nor baked into the image, and the
+      # container filesystem is ephemeral so a file copied in by hand does not survive a cold
+      # start. The workbook is therefore fetched at start-up from private storage you control
+      # (Cloudflare R2, S3, or any URL that serves the .xlsx). Both values are secrets - set them
+      # in the Render dashboard, not here. Leave them unset and the app runs on the bundled
+      # technology vocabulary and says so in the Sources & data panel.
       - key: SFIA_DATA_DIR
-        value: /var/data/sfia
+        value: /tmp/sfia
+      - key: SFIA_SOURCE_URL
+        sync: false
+      - key: SFIA_SOURCE_TOKEN
+        sync: false
+      # Guards /api/admin/**, which replaces the reference framework every analysis is built on.
+      # Unset means those endpoints refuse everything.
+      - key: ADMIN_TOKEN
+        sync: false
+      # The session cookie is the only thing separating one person's CV from another's, so the
+      # API accepts credentialed calls from this origin and no other. Must match the frontend URL
+      # exactly, scheme included.
+      - key: APP_CORS_ALLOWED_ORIGINS
+        sync: false
       - key: DATABASE_URL
         fromDatabase:
           name: aicareer-db

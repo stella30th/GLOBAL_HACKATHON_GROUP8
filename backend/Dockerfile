@@ -17,6 +17,14 @@ WORKDIR /app
 COPY --from=build /app/target/*.jar app.jar
 EXPOSE 8080
 
+# The SFIA workbook is deliberately NOT copied in. It is licensed content, this image is built
+# from a public repository, and the build stage only ever copies ./src - so a file left in
+# backend/data/sfia never reaches the image whatever the build context contains. The application
+# fetches it at start-up from SFIA_SOURCE_URL instead; see application.yaml. This directory is
+# created so the download has somewhere to land on a read-only-ish filesystem.
+RUN mkdir -p /tmp/sfia
+ENV SFIA_DATA_DIR=/tmp/sfia
+
 # Tuned for Render's free instance (512 MB, shared CPU), where the dominant cost is the cold start
 # after the service is spun down for inactivity:
 #   MaxRAMPercentage  - use the container limit instead of the JVM's conservative default

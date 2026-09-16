@@ -2,6 +2,7 @@ package com.gbhackathon.AICareerCode.service.pipeline;
 
 import com.gbhackathon.AICareerCode.dto.plan.CareerGoalDto;
 import com.gbhackathon.AICareerCode.dto.plan.LearningPathDto;
+import com.gbhackathon.AICareerCode.dto.plan.SkillGraphDto;
 import com.gbhackathon.AICareerCode.model.LearningResourceDoc;
 import org.junit.jupiter.api.Test;
 
@@ -26,6 +27,101 @@ class LearningPathStepTest {
     private static final Set<String> GAP_IDS = Set.of("gap-a", "gap-b");
     private static final Set<String> RESOURCE_KEYS = Set.of("mdn-web-docs", "sqlbolt");
 
+    /** SQL must come before automated testing; "basic programming" is already evidenced. */
+    private static final SkillGraphDto GRAPH = graph();
+
+    private static SkillGraphDto graph() {
+        SkillGraphDto g = new SkillGraphDto();
+        g.nodes = new ArrayList<>(List.of(
+                node("n1", "SQL", SkillGraphDto.KIND_GAP),
+                node("n2", "Automated testing", SkillGraphDto.KIND_GAP),
+                node("n3", "Basic programming", SkillGraphDto.KIND_CURRENT),
+                node("n4", "Backend Developer", SkillGraphDto.KIND_TARGET)));
+        g.edges = new ArrayList<>(List.of(
+                edge("n1", "n2", SkillGraphDto.RELATION_PREREQUISITE),
+                edge("n3", "n1", SkillGraphDto.RELATION_PREREQUISITE)));
+        return g;
+    }
+
+    private static SkillGraphDto.Node node(String id, String label, String kind) {
+        SkillGraphDto.Node n = new SkillGraphDto.Node();
+        n.id = id;
+        n.label = label;
+        n.kind = kind;
+        return n;
+    }
+
+    private static SkillGraphDto.Edge edge(String from, String to, String relation) {
+        SkillGraphDto.Edge e = new SkillGraphDto.Edge();
+        e.from = from;
+        e.to = to;
+        e.relation = relation;
+        e.basis = SkillGraphDto.BASIS_AI;
+        return e;
+    }
+
+    // ---- the graph as a constraint ----
+
+    /**
+     * The check that makes the graph step worth running. Before it existed the topological order
+     * was computed, printed into the prompt, and never enforced - so a plan that ignored it was
+     * accepted and the ordering was decoration.
+     */
+    @Test
+    void rejectsAPhaseThatTeachesASkillBeforeItsGraphPrerequisite() {
+        LearningPathDto path = validPath();
+        // Swap them: testing now comes first, although the graph says SQL precedes it.
+        path.phases.get(0).skillNodeIds = List.of("n2");
+        path.phases.get(1).skillNodeIds = List.of("n1");
+
+        List<String> problems = step.validate(path, GAP_IDS, RESOURCE_KEYS, 500, GRAPH);
+
+        assertTrue(problems.stream().anyMatch(p -> p.contains("must come first")), problems.toString());
+    }
+
+    /**
+     * A prerequisite the profile already evidences is not something the plan has to teach, so its
+     * absence from every phase is correct rather than an ordering mistake.
+     */
+    @Test
+    void doesNotDemandThatThePlanTeachAnAlreadyEvidencedPrerequisite() {
+        // n1 (SQL) depends on n3 (Basic programming, kind CURRENT), and no phase teaches n3.
+        assertTrue(step.validate(validPath(), GAP_IDS, RESOURCE_KEYS, 500, GRAPH).isEmpty());
+    }
+
+    @Test
+    void rejectsAPhaseReferencingAGraphNodeThatDoesNotExist() {
+        LearningPathDto path = validPath();
+        path.phases.get(0).skillNodeIds = List.of("n99");
+
+        List<String> problems = step.validate(path, GAP_IDS, RESOURCE_KEYS, 500, GRAPH);
+
+        assertTrue(problems.stream().anyMatch(p -> p.contains("n99")), problems.toString());
+    }
+
+    /**
+     * Without ids the prerequisite check cannot run at all, and a silently unchecked plan is the
+     * state this whole fix exists to leave behind.
+     */
+    @Test
+    void rejectsAPhaseWithNoGraphNodeIds() {
+        LearningPathDto path = validPath();
+        path.phases.get(0).skillNodeIds = List.of();
+
+        List<String> problems = step.validate(path, GAP_IDS, RESOURCE_KEYS, 500, GRAPH);
+
+        assertTrue(problems.stream().anyMatch(p -> p.contains("no skillNodeIds")), problems.toString());
+    }
+
+    /** No graph means no graph check; the rest of the validation still applies. */
+    @Test
+    void skipsTheGraphCheckWhenThereIsNoGraph() {
+        LearningPathDto path = validPath();
+        path.phases.forEach(phase -> phase.skillNodeIds = null);
+
+        assertTrue(step.validate(path, GAP_IDS, RESOURCE_KEYS, 500, new SkillGraphDto()).isEmpty());
+    }
+
     // ---- citations ----
 
     /**
@@ -37,7 +133,7 @@ class LearningPathStepTest {
         LearningPathDto path = validPath();
         path.phases.get(0).resources.get(0).resourceKey = "some-course-i-remember";
 
-        List<String> problems = step.validate(path, GAP_IDS, RESOURCE_KEYS, 200);
+        List<String> problems = step.validate(path, GAP_IDS, RESOURCE_KEYS, 200, GRAPH);
 
         assertTrue(problems.stream().anyMatch(p -> p.contains("some-course-i-remember")),
                 problems.toString());
@@ -48,7 +144,7 @@ class LearningPathStepTest {
         LearningPathDto path = validPath();
         path.phases.get(0).resources.get(0).url = "https://example.com/invented";
 
-        List<String> problems = step.validate(path, GAP_IDS, RESOURCE_KEYS, 200);
+        List<String> problems = step.validate(path, GAP_IDS, RESOURCE_KEYS, 200, GRAPH);
 
         assertTrue(problems.stream().anyMatch(p -> p.contains("Do not write URLs")), problems.toString());
     }
@@ -62,7 +158,7 @@ class LearningPathStepTest {
         LearningPathDto path = validPath();
         path.phases.forEach(phase -> phase.resources = List.of());
 
-        assertTrue(step.validate(path, GAP_IDS, Set.of(), 200).isEmpty());
+        assertTrue(step.validate(path, GAP_IDS, Set.of(), 200, GRAPH).isEmpty());
     }
 
     @Test
@@ -70,7 +166,7 @@ class LearningPathStepTest {
         LearningPathDto path = validPath();
         path.phases.get(0).resources = List.of();
 
-        List<String> problems = step.validate(path, GAP_IDS, RESOURCE_KEYS, 200);
+        List<String> problems = step.validate(path, GAP_IDS, RESOURCE_KEYS, 200, GRAPH);
 
         assertTrue(problems.stream().anyMatch(p -> p.contains("cites no resources")), problems.toString());
     }
@@ -87,7 +183,7 @@ class LearningPathStepTest {
         LearningPathDto path = validPath();
         path.phases.get(0).estimatedHours = 400;
 
-        List<String> problems = step.validate(path, GAP_IDS, RESOURCE_KEYS, 100);
+        List<String> problems = step.validate(path, GAP_IDS, RESOURCE_KEYS, 100, GRAPH);
 
         assertTrue(problems.stream().anyMatch(p -> p.contains("hours but the student only has")),
                 problems.toString());
@@ -95,7 +191,7 @@ class LearningPathStepTest {
 
     @Test
     void acceptsAPlanThatUsesLessThanTheHoursAvailable() {
-        assertTrue(step.validate(validPath(), GAP_IDS, RESOURCE_KEYS, 500).isEmpty());
+        assertTrue(step.validate(validPath(), GAP_IDS, RESOURCE_KEYS, 500, GRAPH).isEmpty());
     }
 
     // ---- structure ----
@@ -105,7 +201,7 @@ class LearningPathStepTest {
         LearningPathDto path = validPath();
         path.phases.get(1).startWeek = 8;
 
-        List<String> problems = step.validate(path, GAP_IDS, RESOURCE_KEYS, 500);
+        List<String> problems = step.validate(path, GAP_IDS, RESOURCE_KEYS, 500, GRAPH);
 
         assertTrue(problems.stream().anyMatch(p -> p.contains("consecutively")), problems.toString());
     }
@@ -115,7 +211,7 @@ class LearningPathStepTest {
         LearningPathDto path = validPath();
         path.phases.get(0).addressesGapIds = List.of("gap-that-does-not-exist");
 
-        List<String> problems = step.validate(path, GAP_IDS, RESOURCE_KEYS, 500);
+        List<String> problems = step.validate(path, GAP_IDS, RESOURCE_KEYS, 500, GRAPH);
 
         assertTrue(problems.stream().anyMatch(p -> p.contains("gap-that-does-not-exist")),
                 problems.toString());
@@ -132,7 +228,7 @@ class LearningPathStepTest {
         path.phases.get(0).prerequisiteSkills = List.of("Automated testing");
         path.phases.get(1).skills = List.of("Automated testing");
 
-        List<String> problems = step.validate(path, GAP_IDS, RESOURCE_KEYS, 500);
+        List<String> problems = step.validate(path, GAP_IDS, RESOURCE_KEYS, 500, GRAPH);
 
         assertTrue(problems.stream().anyMatch(p -> p.contains("Move it earlier")), problems.toString());
     }
@@ -146,7 +242,7 @@ class LearningPathStepTest {
         LearningPathDto path = validPath();
         path.phases.get(0).prerequisiteSkills = List.of("Basic programming");
 
-        assertTrue(step.validate(path, GAP_IDS, RESOURCE_KEYS, 500).isEmpty());
+        assertTrue(step.validate(path, GAP_IDS, RESOURCE_KEYS, 500, GRAPH).isEmpty());
     }
 
     @Test
@@ -154,7 +250,7 @@ class LearningPathStepTest {
         LearningPathDto path = validPath();
         path.feasibility = null;
 
-        List<String> problems = step.validate(path, GAP_IDS, RESOURCE_KEYS, 500);
+        List<String> problems = step.validate(path, GAP_IDS, RESOURCE_KEYS, 500, GRAPH);
 
         assertTrue(problems.stream().anyMatch(p -> p.contains("feasibility.verdict")), problems.toString());
     }
@@ -215,7 +311,7 @@ class LearningPathStepTest {
         assertEquals(0, goal.budgetHours());
         // A zero budget must not then reject every plan for overrunning it.
         assertNull(goal.durationMonths);
-        assertFalse(step.validate(validPath(), GAP_IDS, RESOURCE_KEYS, 0).stream()
+        assertFalse(step.validate(validPath(), GAP_IDS, RESOURCE_KEYS, 0, GRAPH).stream()
                 .anyMatch(p -> p.contains("hours but the student only has")));
     }
 
@@ -231,14 +327,16 @@ class LearningPathStepTest {
         path.feasibility = feasibility;
 
         path.phases = new ArrayList<>(List.of(
-                phase(1, "Foundations", 1, 4, 30, List.of("SQL"), "gap-a"),
-                phase(2, "Building on it", 5, 8, 30, List.of("Automated testing"), "gap-b")));
+                phase(1, "Foundations", 1, 4, 30, List.of("SQL"), List.of("n1"), "gap-a"),
+                phase(2, "Building on it", 5, 8, 30, List.of("Automated testing"), List.of("n2"), "gap-b")));
         return path;
     }
 
     private LearningPathDto.Phase phase(int order, String title, int startWeek, int endWeek,
-                                        int hours, List<String> skills, String gapId) {
+                                        int hours, List<String> skills, List<String> nodeIds,
+                                        String gapId) {
         LearningPathDto.Phase phase = new LearningPathDto.Phase();
+        phase.skillNodeIds = new ArrayList<>(nodeIds);
         phase.order = order;
         phase.title = title;
         phase.goal = "Be able to do " + title.toLowerCase();

@@ -11,6 +11,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import com.gbhackathon.AICareerCode.config.SessionIdFilter;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -28,7 +30,6 @@ import java.util.Map;
  */
 @RestController
 @RequestMapping("/api/profiles")
-@CrossOrigin(origins = "*")
 public class ProfileController {
 
     private static final Logger log = LoggerFactory.getLogger(ProfileController.class);
@@ -42,15 +43,15 @@ public class ProfileController {
     }
 
     @GetMapping("/current")
-    public ResponseEntity<ProfileDto> getCurrentProfile() {
-        UserProfile profile = profileService.getCurrentOrCreateProfile();
+    public ResponseEntity<ProfileDto> getCurrentProfile(HttpServletRequest request) {
+        UserProfile profile = profileService.getCurrentOrCreateProfile(SessionIdFilter.require(request));
         return ResponseEntity.ok(profileService.toDto(profile));
     }
 
     @PostMapping
-    public ResponseEntity<?> saveProfile(@RequestBody ProfileDto dto) {
+    public ResponseEntity<?> saveProfile(HttpServletRequest request, @RequestBody ProfileDto dto) {
         try {
-            UserProfile saved = profileService.saveOrUpdateProfile(dto);
+            UserProfile saved = profileService.saveOrUpdateProfile(SessionIdFilter.require(request), dto);
             return ResponseEntity.ok(profileService.toDto(saved));
         } catch (ProfileValidationException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
@@ -58,7 +59,8 @@ public class ProfileController {
     }
 
     @PostMapping("/upload-cv")
-    public ResponseEntity<?> uploadAndParseCv(@RequestParam("file") MultipartFile file) {
+    public ResponseEntity<?> uploadAndParseCv(HttpServletRequest request,
+                                             @RequestParam("file") MultipartFile file) {
         if (file.isEmpty()) {
             return ResponseEntity.badRequest().body(Map.of("error", "Please choose a CV file to upload."));
         }
@@ -67,7 +69,7 @@ public class ProfileController {
             ProfileDto parsed = cvParserService.parseCvTextToProfile(text);
             // A CV describes a whole candidate, so the profile is replaced rather than merged field
             // by field - otherwise the previous candidate's skills survive the upload.
-            UserProfile saved = profileService.replaceProfileFromCv(parsed);
+            UserProfile saved = profileService.replaceProfileFromCv(SessionIdFilter.require(request), parsed);
             return ResponseEntity.ok(profileService.toDto(saved));
         } catch (CvParserService.UnreadableCvException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
@@ -101,7 +103,8 @@ public class ProfileController {
      * generated plan in one click - and the plan itself is still generated, never stored in advance.
      */
     @PostMapping("/reset-sample/{type}")
-    public ResponseEntity<?> setSampleProfile(@PathVariable("type") String type) {
+    public ResponseEntity<?> setSampleProfile(HttpServletRequest request,
+                                              @PathVariable("type") String type) {
         ProfileDto p = new ProfileDto();
         if ("student-early".equalsIgnoreCase(type)) {
             p.setFullName("Mai Tran");
@@ -149,7 +152,7 @@ public class ProfileController {
                     "Unknown sample profile '" + type + "'. Available samples: student-early, student-final."));
         }
 
-        UserProfile saved = profileService.replaceProfileFromSample(p);
+        UserProfile saved = profileService.replaceProfileFromSample(SessionIdFilter.require(request), p);
         return ResponseEntity.ok(profileService.toDto(saved));
     }
 }

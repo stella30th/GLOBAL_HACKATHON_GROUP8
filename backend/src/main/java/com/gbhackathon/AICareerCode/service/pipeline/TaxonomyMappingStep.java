@@ -101,7 +101,9 @@ public class TaxonomyMappingStep {
                 - profileEvidence: one entry per distinct skill the profile mentions. Do not add
                   skills the profile does not mention. Every string in evidenceQuotes must appear
                   in the profile text above; if you cannot quote it, use an empty list and set
-                  evidenceStatus accordingly.
+                  evidenceStatus accordingly. Every quotation is checked against the profile text
+                  automatically - a paraphrase, a tidied-up version or a plausible-sounding
+                  reconstruction will be rejected. Copy the wording exactly.
                 - assessedLevel: leave it null unless the profile shows what the person did with
                   the skill, not merely that they named it. When you do set it, levelBasis must say
                   what in the profile supports that level. A level with no basis will be rejected.
@@ -118,7 +120,37 @@ public class TaxonomyMappingStep {
                 PromptSupport.describeGoal(goal),
                 PromptSupport.describeTaxonomy(retrievedTaxonomy));
 
-        return runner.run("taxonomy-mapping", prompt, Result.class, result -> validate(result, byCode, goal));
+        String profileCorpus = profileCorpus(profile);
+        return runner.run("taxonomy-mapping", prompt, Result.class,
+                result -> validate(result, byCode, goal, profileCorpus));
+    }
+
+    /**
+     * Everything a quotation could honestly have come from, as one string.
+     *
+     * <p>Assembled from the stored fields plus the raw CV rather than reusing
+     * {@link PromptSupport#describeCandidate}, because that string also contains the instructions
+     * wrapped around the data - and a quote that "matched" the instruction text would pass a check
+     * that exists to catch exactly that kind of drift.
+     */
+    static String profileCorpus(UserProfile profile) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(String.join(" ", profile.getSkillList())).append(' ');
+        appendIfPresent(sb, profile.getBio());
+        appendIfPresent(sb, profile.getEducation());
+        appendIfPresent(sb, profile.getLanguages());
+        appendIfPresent(sb, profile.getCurrentTitle());
+        appendIfPresent(sb, profile.getIndustry());
+        appendIfPresent(sb, profile.getFullName());
+        appendIfPresent(sb, String.join(" ", profile.getTargetRoleList()));
+        appendIfPresent(sb, profile.getRawCvText());
+        return sb.toString();
+    }
+
+    private static void appendIfPresent(StringBuilder sb, String value) {
+        if (value != null && !value.isBlank()) {
+            sb.append(value).append(' ');
+        }
     }
 
     /**
@@ -127,7 +159,8 @@ public class TaxonomyMappingStep {
      *
      * <p>Package-private so the rules can be exercised directly in tests, without a model call.
      */
-    List<String> validate(Result result, Map<String, TaxonomySkill> byCode, CareerGoalDto goal) {
+    List<String> validate(Result result, Map<String, TaxonomySkill> byCode, CareerGoalDto goal,
+                          String profileCorpus) {
         List<String> problems = new ArrayList<>();
 
         if (result.profileEvidence == null || result.profileEvidence.isEmpty()) {
@@ -174,6 +207,20 @@ public class TaxonomyMappingStep {
                             + "nothing from the profile. Quote the supporting text, or lower the "
                             + "status to LIMITED_EVIDENCE or NO_DATA.");
                 }
+                // Requiring a quote and never reading it is close to worthless: a model asked for
+                // supporting text will produce supporting text, and a paraphrase reads exactly like
+                // a quotation. The line this product draws between "your profile shows this" and
+                // "your profile is silent" only means something if the quote is really in there.
+                if (evidence.evidenceQuotes != null) {
+                    for (String quote : evidence.evidenceQuotes) {
+                        if (!TextEvidence.appearsIn(profileCorpus, quote)) {
+                            problems.add("'" + evidence.skillLabel + "' quotes \""
+                                    + TextEvidence.excerpt(quote) + "\", which does not appear in the "
+                                    + "profile. Quote the text exactly as it is written there, or "
+                                    + "remove the quote and lower evidenceStatus accordingly.");
+                        }
+                    }
+                }
             }
         }
 
@@ -190,9 +237,19 @@ public class TaxonomyMappingStep {
                             + requirement.skillLabel + "' is not in the retrieved taxonomy list. Use a "
                             + "code from that list or set it to null.");
                 }
-                if (!jdSupplied && TargetRequirementDto.SOURCE_JOB_DESCRIPTION.equals(requirement.sourceType)) {
-                    problems.add("'" + requirement.skillLabel + "' claims sourceType JOB_DESCRIPTION "
-                            + "but no job description was supplied. Use TAXONOMY or AI_JUDGEMENT.");
+                if (TargetRequirementDto.SOURCE_JOB_DESCRIPTION.equals(requirement.sourceType)) {
+                    if (!jdSupplied) {
+                        problems.add("'" + requirement.skillLabel + "' claims sourceType JOB_DESCRIPTION "
+                                + "but no job description was supplied. Use TAXONOMY or AI_JUDGEMENT.");
+                    } else if (!TextEvidence.appearsIn(goal.jobDescription, requirement.sourceNote)) {
+                        // The label on this field is what a student uses to decide how much weight
+                        // to give a requirement. "The advert says so" has to mean the advert says so.
+                        problems.add("'" + requirement.skillLabel + "' claims sourceType "
+                                + "JOB_DESCRIPTION, but its sourceNote \""
+                                + TextEvidence.excerpt(requirement.sourceNote) + "\" does not appear "
+                                + "in the job description. Quote the advert exactly, or change "
+                                + "sourceType to TAXONOMY or AI_JUDGEMENT.");
+                    }
                 }
                 if (isBlank(requirement.sourceNote)) {
                     problems.add("'" + requirement.skillLabel + "' needs a sourceNote saying what "

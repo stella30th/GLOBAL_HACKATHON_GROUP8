@@ -125,22 +125,48 @@ Kiểm tra AI có thật sự trả lời:
 curl "http://localhost:8080/api/coach/ai-status?probe=true"
 ```
 
-### SFIA 9 (cần bạn cung cấp)
+### SFIA 9
 
 SFIA là nội dung **có bản quyền**: miễn phí cho phát triển cá nhân và phần lớn nhu cầu nội bộ của
 doanh nghiệp, nhưng phải **đăng ký tài khoản** mới tải được. Repo này không chứa và sẽ không chứa
-bản sao nào.
+bản sao nào, và `backend/data/` nằm trong `.gitignore` để không commit nhầm.
 
-**Cách lấy:**
+✅ **Đã chạy được với file thật.** Workbook `sfia-9_current-standard_en_260521.xlsx` cho ra
+**147 skills**, và **65/66** dòng từ vựng công nghệ khớp được mã SFIA thật. Xem số liệu hiện tại ở
+`GET /api/plan/data-status`.
 
-1. Đăng ký tài khoản tại [sfia-online.org](https://sfia-online.org/en/sfia-9/documentation).
+**Local:**
+
+1. Đăng ký tại [sfia-online.org](https://sfia-online.org/en/sfia-9/documentation).
 2. Vào **SFIA 9 → Documentation**, tải file Excel *"SFIA 9 skill descriptions"* (`.xlsx`).
-3. Đặt file vào `backend/data/sfia/` (thư mục này đã nằm trong `.gitignore`).
-4. Khởi động lại backend, hoặc gọi `POST /api/plan/data-status/reload`.
+3. Đặt vào `backend/data/sfia/`.
+4. Khởi động lại backend, hoặc gọi `POST /api/admin/sfia/reload` với header `X-Admin-Token`.
 
-Đổi vị trí bằng `SFIA_DATA_DIR`.
+**Trên production (Render và tương tự):** filesystem của container là ephemeral — file copy tay sẽ
+mất sau mỗi cold start — và Dockerfile **cố tình không copy** file SFIA vào image vì image build từ
+repo công khai. Thay vào đó backend **tự tải lúc khởi động** khi thư mục trống:
 
-**Khi chưa có file:** hệ thống vẫn chạy trên bộ từ vựng công nghệ đi kèm (66 mục trong
+| Biến | Ý nghĩa |
+|---|---|
+| `SFIA_DATA_DIR` | Nơi đặt/tải file. Mặc định `./data/sfia`, trên container là `/tmp/sfia`. |
+| `SFIA_SOURCE_URL` | URL tải workbook: pre-signed link từ R2/S3, hoặc URL có token. **Secret.** |
+| `SFIA_SOURCE_TOKEN` | Gửi kèm dạng `Authorization: Bearer`. Tuỳ chọn. **Secret.** |
+
+File được ghi ra `.part` rồi mới đổi tên — kết nối đứt giữa chừng không để lại file cụt khiến
+parser báo lỗi sai ở mọi lần khởi động sau. URL và token **không bao giờ vào log**.
+
+Endpoint admin (`X-Admin-Token`, xem `ADMIN_TOKEN`):
+
+```bash
+curl -X POST -H "X-Admin-Token: $ADMIN_TOKEN" -F "file=@sfia-9.xlsx" \
+  http://localhost:8080/api/admin/sfia/upload
+```
+
+Hữu ích để sửa nhanh không cần redeploy, nhưng **không phải** đường bền vững trên container
+ephemeral — nó ghi vào filesystem, mất khi cold start. `SFIA_SOURCE_URL` mới là thứ sống sót.
+Chưa đặt `ADMIN_TOKEN` thì các endpoint admin **từ chối tất cả**, không mở toang.
+
+**Khi không có file:** hệ thống vẫn chạy trên bộ từ vựng công nghệ đi kèm (66 mục trong
 `backend/src/main/resources/taxonomy/technology-extensions.json`), và **nói rõ** điều đó ở panel
 *Sources & data* cùng trong phần provenance của mọi lộ trình sinh ra trong thời gian đó. Các mã
 hiển thị khi đó **không phải** mã SFIA chính thức.
@@ -276,10 +302,12 @@ cd frontend && npm run lint && npm run build
 | `POST /api/profiles/upload-cv` | Tải CV, trích xuất bằng AI (503 khi AI không khả dụng) |
 | `POST /api/profiles/reset-sample/{student-early\|student-final}` | Hồ sơ mẫu để demo |
 | `GET /api/plan` | Lộ trình đã lưu, hoặc `plan: null` kèm `missingInputs` |
-| `POST /api/plan/generate` | **Chạy pipeline.** 503 khi AI hỏng, 502 khi AI không sửa được kết quả |
+| `POST /api/plan/generate[?force=true]` | **Chạy pipeline.** 503 khi AI hỏng, 502 khi AI không sửa được kết quả. `force=true` khi người dùng chủ động tạo lại; không có nó thì input không đổi sẽ trả lại plan đã lưu |
 | `PATCH /api/plan/progress/{itemId}` | Tick một giai đoạn / hoạt động / tiêu chí |
 | `GET /api/plan/data-status` | Taxonomy, kho tài liệu và cấu hình model đang có |
 | `POST /api/plan/data-status/reload` | Nạp lại SFIA và các catalogue từ đĩa |
+| `POST /api/admin/sfia/upload` | Tải workbook SFIA lên và nạp ngay. Cần `X-Admin-Token` |
+| `POST /api/admin/sfia/reload` | Đọc lại workbook, hoặc tải từ `SFIA_SOURCE_URL`. Cần `X-Admin-Token` |
 | `POST /api/plan/data-status/verify-urls` | Kiểm tra link toàn bộ catalogue |
 | `POST /api/coach/chat` | Panel hỏi đáp về lộ trình |
 | `GET /api/coach/ai-status?probe=true` | Một round trip thật tới Gemini |
@@ -288,6 +316,33 @@ cd frontend && npm run lint && npm run build
 mở trang tự kích hoạt nó nghĩa là tiêu quota theo ngày cho người chỉ muốn xem lại thứ đã có.
 
 ---
+
+## 👤 Phiên và cách ly dữ liệu
+
+Không có đăng nhập. Mỗi trình duyệt nhận một **phiên ẩn danh** qua cookie `sid` (UUID do server
+cấp, `HttpOnly`), và **mọi** profile đều gắn với phiên đó qua cột `session_id`.
+
+Điều này sửa một lỗi nghiêm trọng của bản trước: hệ thống chỉ có **một hàng profile duy nhất dùng
+chung cho tất cả mọi người**. `getCurrentOrCreateProfile()` lấy hàng có `updatedAt` mới nhất rồi
+**xoá mọi hàng còn lại**, nên hai người mở web cùng lúc là đọc CV của nhau, và người thứ hai lưu hồ
+sơ là xoá mất hàng của người thứ nhất.
+
+| Biến | Mặc định | Ghi chú |
+|---|---|---|
+| `APP_CORS_ALLOWED_ORIGINS` | `http://localhost:5173,...` | **Bắt buộc đặt khi deploy.** Danh sách origin cụ thể, không dùng `*`: request có cookie mà phản chiếu origin bất kỳ nghĩa là trang web nào cũng gọi API thay người dùng được. |
+| `APP_SESSION_COOKIE_SECURE` | `true` | Profile `local` để `false` (dev chạy HTTP). |
+| `APP_SESSION_COOKIE_SAME_SITE` | `None` | Bắt buộc `None` khi frontend và API khác origin. Profile `local` dùng `Lax`. |
+| `ADMIN_TOKEN` | *(trống)* | Guard cho `/api/admin/**`. Trống ⇒ từ chối hết. |
+
+Frontend gửi `credentials: 'include'` ở một chỗ duy nhất (`fetchWithTimeout` trong `api.js`).
+
+**Nói rõ giới hạn:** đây là **cách ly giữa người dùng bình thường**, không phải xác thực. Ai có giá
+trị cookie thì có profile đó. Với sản phẩm giữ CV thật ngoài phạm vi demo, lớp này nên được **thay
+bằng tài khoản**, không phải mở rộng thêm.
+
+**Migration:** `LegacyProfilePurge` xoá các hàng không có `session_id` lúc khởi động. Đó không phải
+dữ liệu của một người cụ thể — nó là dữ liệu trộn lẫn giữa những người đã dùng bản cũ, không quy
+được cho ai và không có gì để giữ. Log ghi số hàng bị xoá, không ghi nội dung.
 
 ## 🔒 Bảo mật và dữ liệu cá nhân
 
