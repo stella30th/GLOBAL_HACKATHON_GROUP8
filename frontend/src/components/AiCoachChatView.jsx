@@ -106,10 +106,10 @@ export default function AiCoachChatView({ profile }) {
     return lines.map((line, idx) => {
       let processed = line;
       if (line.startsWith('### ')) {
-        return <h3 key={idx} style={{ color: '#fff', margin: '0.6rem 0 0.3rem', fontSize: '1.05rem' }}>{line.replace('### ', '')}</h3>;
+        return <h3 key={idx} style={{ color: 'var(--text-primary)', margin: '0.6rem 0 0.3rem', fontSize: '1.05rem' }}>{line.replace('### ', '')}</h3>;
       }
       if (line.startsWith('## ')) {
-        return <h2 key={idx} style={{ color: '#fff', margin: '0.8rem 0 0.4rem', fontSize: '1.2rem' }}>{line.replace('## ', '')}</h2>;
+        return <h2 key={idx} style={{ color: 'var(--text-primary)', margin: '0.8rem 0 0.4rem', fontSize: '1.2rem' }}>{line.replace('## ', '')}</h2>;
       }
       if (line.startsWith('- ') || line.startsWith('* ')) {
         return (
@@ -163,8 +163,8 @@ export default function AiCoachChatView({ profile }) {
                   </>
                 ) : (
                   <>
-                    <Bot size={13} color="#818cf8" />
-                    <span style={{ color: '#818cf8', fontWeight: '700' }}>AI Career Coach</span>
+                    <Bot size={13} style={{ color: 'var(--accent-soft)' }} />
+                    <span style={{ color: 'var(--accent-soft)', fontWeight: '700' }}>AI Career Coach</span>
                     {msg.generatedBy === 'gemini' && (
                       <span className="ai-badge ai-badge-live">
                         <Sparkles size={10} /> {msg.model || 'Gemini'}
@@ -184,11 +184,11 @@ export default function AiCoachChatView({ profile }) {
 
           {loading && (
             <div className="chat-bubble chat-bubble-ai" style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-              <Sparkles className="ai-wave" size={16} color="#818cf8" />
+              <Sparkles className="ai-wave" size={16} style={{ color: 'var(--accent-soft)' }} />
               <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
                 AI is reviewing your profile and writing an answer
               </span>
-              <span className="wave-dots" style={{ color: '#818cf8' }}>
+              <span className="wave-dots" style={{ color: 'var(--accent-soft)' }}>
                 <span /><span /><span />
               </span>
             </div>

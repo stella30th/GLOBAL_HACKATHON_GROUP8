@@ -1,7 +1,6 @@
-import React from 'react';
-import { Sparkles, User, Briefcase, Award, MessageSquare } from 'lucide-react';
+import { Sparkles, User, Briefcase, Award, MessageSquare, Sun, Moon } from 'lucide-react';
 
-export default function Navbar({ activeTab, setActiveTab }) {
+export default function Navbar({ activeTab, setActiveTab, theme, onToggleTheme }) {
   const tabs = [
     { id: 'profile', label: 'Profile & Resume', icon: User },
     { id: 'matching', label: 'Job Matching', icon: Briefcase },
@@ -39,6 +38,15 @@ export default function Navbar({ activeTab, setActiveTab }) {
         })}
       </nav>
 
+      <button
+        type="button"
+        className="theme-toggle"
+        onClick={onToggleTheme}
+        title={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
+        aria-label={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
+      >
+        {theme === 'light' ? <Moon size={17} /> : <Sun size={17} />}
+      </button>
     </header>
   );
 }

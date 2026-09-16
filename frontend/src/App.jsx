@@ -30,6 +30,20 @@ const STATUS = {
   OFFLINE: 'offline',
 };
 
+const THEME_KEY = 'AICAREER_THEME';
+
+/** Stored choice first, then the OS preference, then dark. */
+function initialTheme() {
+  if (typeof window === 'undefined') return 'dark';
+  try {
+    const saved = localStorage.getItem(THEME_KEY);
+    if (saved === 'light' || saved === 'dark') return saved;
+  } catch {
+    // Storage can be unavailable in private mode; fall through to the system preference.
+  }
+  return window.matchMedia?.('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+}
+
 export default function App() {
   const [activeTab, setActiveTab] = useState('matching');
   // Show the last known profile immediately so the UI is populated while the server wakes.
@@ -38,7 +52,20 @@ export default function App() {
   const [wakeSeconds, setWakeSeconds] = useState(0);
   const [backendInput, setBackendInput] = useState('');
   const [toast, setToast] = useState(null);
+  const [theme, setTheme] = useState(initialTheme);
   const connectingRef = useRef(false);
+
+  // The attribute drives the token overrides in index.css; colour-scheme keeps native controls
+  // (scrollbars, form widgets) in step with the theme.
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    document.documentElement.style.colorScheme = theme;
+    try {
+      localStorage.setItem(THEME_KEY, theme);
+    } catch {
+      // Not being able to remember the choice is not worth failing the render over.
+    }
+  }, [theme]);
 
   const connect = useCallback(async () => {
     if (connectingRef.current) return;
@@ -89,7 +116,12 @@ export default function App() {
 
   return (
     <div className="app-container">
-      <Navbar activeTab={activeTab} setActiveTab={setActiveTab} />
+      <Navbar
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        theme={theme}
+        onToggleTheme={() => setTheme((t) => (t === 'light' ? 'dark' : 'light'))}
+      />
 
       {status === STATUS.CONNECTING && (
         <div className="conn-banner conn-banner-waking">
@@ -143,7 +175,7 @@ export default function App() {
         )}
 
         {activeTab === 'matching' && (
-          <JobMatchingView profile={profile} showToast={showToast} />
+          <JobMatchingView profile={profile} setProfile={setProfile} showToast={showToast} />
         )}
 
         {activeTab === 'audit' && <ResumeAuditView profile={profile} />}
@@ -153,7 +185,7 @@ export default function App() {
 
       {toast && (
         <div className="toast">
-          <CheckCircle2 size={18} color="#10b981" />
+          <CheckCircle2 size={18} style={{ color: 'var(--accent-emerald)' }} />
           <span>{toast}</span>
         </div>
       )}

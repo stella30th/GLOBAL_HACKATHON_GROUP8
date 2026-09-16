@@ -55,7 +55,7 @@ export default function ResumeAuditView({ profile }) {
         <div className="page-header-text">
           <h1>Resume Audit & Career Progression Roadmap</h1>
           <p>
-            Candidate: <strong style={{ color: '#fff' }}>{profile?.fullName || 'Current profile'}</strong>
+            Candidate: <strong style={{ color: 'var(--text-primary)' }}>{profile?.fullName || 'Current profile'}</strong>
             {' '}({profile?.currentTitle || 'role not set'}{profile?.industry ? ` — ${profile.industry}` : ''})
             {' '}• Scored against international ATS standards for your own field.
           </p>
@@ -69,7 +69,7 @@ export default function ResumeAuditView({ profile }) {
       <div className="score-hero-card">
         <div style={{ maxWidth: '700px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', color: '#818cf8', fontSize: '0.85rem', fontWeight: '700', textTransform: 'uppercase' }}>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', color: 'var(--accent-soft)', fontSize: '0.85rem', fontWeight: '700', textTransform: 'uppercase' }}>
               <Award size={16} />
               <span>Resume Health Index (ATS Benchmark)</span>
             </div>
@@ -83,7 +83,7 @@ export default function ResumeAuditView({ profile }) {
               </span>
             )}
           </div>
-          <h2 style={{ fontSize: '1.8rem', color: '#ffffff', marginBottom: '0.6rem' }}>
+          <h2 style={{ fontSize: '1.8rem', color: 'var(--text-primary)', marginBottom: '0.6rem' }}>
             {audit.verdict}
           </h2>
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.925rem', lineHeight: '1.6' }}>
@@ -101,8 +101,8 @@ export default function ResumeAuditView({ profile }) {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '2rem' }}>
         <div className="glass-card">
           <div className="card-title-row">
-            <div className="card-title" style={{ color: '#34d399' }}>
-              <CheckCircle2 size={20} color="#34d399" />
+            <div className="card-title" style={{ color: 'var(--accent-emerald)' }}>
+              <CheckCircle2 size={20} style={{ color: 'var(--accent-emerald)' }} />
               <span>Key Profile Strengths</span>
             </div>
           </div>
@@ -115,8 +115,8 @@ export default function ResumeAuditView({ profile }) {
 
         <div className="glass-card">
           <div className="card-title-row">
-            <div className="card-title" style={{ color: '#fbbf24' }}>
-              <AlertTriangle size={20} color="#fbbf24" />
+            <div className="card-title" style={{ color: 'var(--accent-amber)' }}>
+              <AlertTriangle size={20} style={{ color: 'var(--accent-amber)' }} />
               <span>Areas to Improve & Red Flags</span>
             </div>
           </div>
@@ -132,7 +132,7 @@ export default function ResumeAuditView({ profile }) {
       <div className="glass-card" style={{ marginBottom: '2rem' }}>
         <div className="card-title-row">
           <div className="card-title">
-            <Target size={20} color="#06b6d4" />
+            <Target size={20} style={{ color: 'var(--accent-secondary)' }} />
             <span>Applicant Tracking System (ATS) Keyword Analysis</span>
           </div>
         </div>
@@ -142,7 +142,7 @@ export default function ResumeAuditView({ profile }) {
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
           <div>
-            <div style={{ fontSize: '0.8rem', fontWeight: '700', color: '#34d399', marginBottom: '0.5rem' }}>
+            <div style={{ fontSize: '0.8rem', fontWeight: '700', color: 'var(--accent-emerald)', marginBottom: '0.5rem' }}>
               Keywords Found in Your Profile ({audit.atsKeywordsPresent.length}):
             </div>
             <div className="tag-container">
@@ -153,7 +153,7 @@ export default function ResumeAuditView({ profile }) {
           </div>
 
           <div>
-            <div style={{ fontSize: '0.8rem', fontWeight: '700', color: '#f59e0b', marginBottom: '0.5rem' }}>
+            <div style={{ fontSize: '0.8rem', fontWeight: '700', color: 'var(--accent-amber)', marginBottom: '0.5rem' }}>
               High-Impact Missing Keywords Recommended ({audit.atsKeywordsMissing.length}):
             </div>
             <div className="tag-container">
@@ -169,7 +169,7 @@ export default function ResumeAuditView({ profile }) {
       <div className="glass-card" style={{ marginBottom: '2rem' }}>
         <div className="card-title-row">
           <div className="card-title">
-            <Sparkles size={20} color="#a855f7" />
+            <Sparkles size={20} style={{ color: 'var(--accent-violet)' }} />
             <span>Experience Bullet Point Rewrites (Google & Amazon STAR Formula)</span>
           </div>
         </div>
@@ -179,14 +179,14 @@ export default function ResumeAuditView({ profile }) {
 
         {audit.bulletImprovements.map((item, idx) => (
           <div key={idx} className="star-card">
-            <div style={{ fontSize: '0.75rem', fontWeight: '700', color: '#ef4444', textTransform: 'uppercase', marginBottom: '0.25rem' }}>
+            <div style={{ fontSize: '0.75rem', fontWeight: '700', color: 'var(--score-low)', textTransform: 'uppercase', marginBottom: '0.25rem' }}>
               Original (Passive / Generic):
             </div>
             <div className="star-before">
               "{item.original}"
             </div>
 
-            <div style={{ fontSize: '0.75rem', fontWeight: '700', color: '#10b981', textTransform: 'uppercase', marginBottom: '0.25rem' }}>
+            <div style={{ fontSize: '0.75rem', fontWeight: '700', color: 'var(--accent-emerald)', textTransform: 'uppercase', marginBottom: '0.25rem' }}>
               AI Improved (STAR Formula + Measurable Impact):
             </div>
             <div className="star-after">
@@ -205,28 +205,28 @@ export default function ResumeAuditView({ profile }) {
         <div className="glass-card">
           <div className="card-title-row">
             <div className="card-title">
-              <Compass size={20} color="#6366f1" />
+              <Compass size={20} style={{ color: 'var(--accent-primary)' }} />
               <span>Personalized 12-Month Career Progression Roadmap</span>
             </div>
-            <span style={{ fontSize: '0.85rem', color: '#818cf8', fontWeight: '600' }}>
+            <span style={{ fontSize: '0.85rem', color: 'var(--accent-soft)', fontWeight: '600' }}>
               Target: {roadmap.targetGoal}
             </span>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1.5rem', marginTop: '1.5rem' }}>
             {/* 3 Months */}
-            <div style={{ background: 'rgba(255, 255, 255, 0.02)', padding: '1.25rem', borderRadius: '14px', border: '1px solid var(--border-color)' }}>
+            <div style={{ background: 'var(--surface-subtle)', padding: '1.25rem', borderRadius: '14px', border: '1px solid var(--border-color)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
-                <span style={{ padding: '0.25rem 0.6rem', borderRadius: '6px', background: 'rgba(99, 102, 241, 0.2)', color: '#818cf8', fontWeight: '700', fontSize: '0.8rem' }}>
+                <span style={{ padding: '0.25rem 0.6rem', borderRadius: '6px', background: 'rgba(99, 102, 241, 0.2)', color: 'var(--accent-soft)', fontWeight: '700', fontSize: '0.8rem' }}>
                   Phase 1
                 </span>
-                <strong style={{ color: '#fff', fontSize: '0.95rem' }}>Months 1-3: Core Gaps & ATS</strong>
+                <strong style={{ color: 'var(--text-primary)', fontSize: '0.95rem' }}>Months 1-3: Core Gaps & ATS</strong>
               </div>
               <div>
                 {roadmap.months3.map((m, idx) => (
                   <div key={idx} className="timeline-item">
                     <div className="timeline-dot"></div>
-                    <div style={{ fontWeight: '600', color: '#fff', fontSize: '0.875rem', marginBottom: '0.25rem' }}>
+                    <div style={{ fontWeight: '600', color: 'var(--text-primary)', fontSize: '0.875rem', marginBottom: '0.25rem' }}>
                       {m.title}
                     </div>
                     <p style={{ color: 'var(--text-secondary)', fontSize: '0.785rem', lineHeight: '1.45', marginBottom: '0.35rem' }}>
@@ -241,18 +241,18 @@ export default function ResumeAuditView({ profile }) {
             </div>
 
             {/* 6 Months */}
-            <div style={{ background: 'rgba(255, 255, 255, 0.02)', padding: '1.25rem', borderRadius: '14px', border: '1px solid var(--border-color)' }}>
+            <div style={{ background: 'var(--surface-subtle)', padding: '1.25rem', borderRadius: '14px', border: '1px solid var(--border-color)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
-                <span style={{ padding: '0.25rem 0.6rem', borderRadius: '6px', background: 'rgba(6, 182, 212, 0.2)', color: '#06b6d4', fontWeight: '700', fontSize: '0.8rem' }}>
+                <span style={{ padding: '0.25rem 0.6rem', borderRadius: '6px', background: 'rgba(6, 182, 212, 0.2)', color: 'var(--accent-secondary)', fontWeight: '700', fontSize: '0.8rem' }}>
                   Phase 2
                 </span>
-                <strong style={{ color: '#fff', fontSize: '0.95rem' }}>Months 4-6: Certs & Open-Source</strong>
+                <strong style={{ color: 'var(--text-primary)', fontSize: '0.95rem' }}>Months 4-6: Certs & Open-Source</strong>
               </div>
               <div>
                 {roadmap.months6.map((m, idx) => (
                   <div key={idx} className="timeline-item">
                     <div className="timeline-dot" style={{ background: '#06b6d4', boxShadow: '0 0 10px #06b6d4' }}></div>
-                    <div style={{ fontWeight: '600', color: '#fff', fontSize: '0.875rem', marginBottom: '0.25rem' }}>
+                    <div style={{ fontWeight: '600', color: 'var(--text-primary)', fontSize: '0.875rem', marginBottom: '0.25rem' }}>
                       {m.title}
                     </div>
                     <p style={{ color: 'var(--text-secondary)', fontSize: '0.785rem', lineHeight: '1.45', marginBottom: '0.35rem' }}>
@@ -267,18 +267,18 @@ export default function ResumeAuditView({ profile }) {
             </div>
 
             {/* 12 Months */}
-            <div style={{ background: 'rgba(255, 255, 255, 0.02)', padding: '1.25rem', borderRadius: '14px', border: '1px solid var(--border-color)' }}>
+            <div style={{ background: 'var(--surface-subtle)', padding: '1.25rem', borderRadius: '14px', border: '1px solid var(--border-color)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
-                <span style={{ padding: '0.25rem 0.6rem', borderRadius: '6px', background: 'rgba(16, 185, 129, 0.2)', color: '#34d399', fontWeight: '700', fontSize: '0.8rem' }}>
+                <span style={{ padding: '0.25rem 0.6rem', borderRadius: '6px', background: 'rgba(16, 185, 129, 0.2)', color: 'var(--accent-emerald)', fontWeight: '700', fontSize: '0.8rem' }}>
                   Phase 3
                 </span>
-                <strong style={{ color: '#fff', fontSize: '0.95rem' }}>Months 7-12: Global Job Search</strong>
+                <strong style={{ color: 'var(--text-primary)', fontSize: '0.95rem' }}>Months 7-12: Global Job Search</strong>
               </div>
               <div>
                 {roadmap.months12.map((m, idx) => (
                   <div key={idx} className="timeline-item">
                     <div className="timeline-dot" style={{ background: '#10b981', boxShadow: '0 0 10px #10b981' }}></div>
-                    <div style={{ fontWeight: '600', color: '#fff', fontSize: '0.875rem', marginBottom: '0.25rem' }}>
+                    <div style={{ fontWeight: '600', color: 'var(--text-primary)', fontSize: '0.875rem', marginBottom: '0.25rem' }}>
                       {m.title}
                     </div>
                     <p style={{ color: 'var(--text-secondary)', fontSize: '0.785rem', lineHeight: '1.45', marginBottom: '0.35rem' }}>

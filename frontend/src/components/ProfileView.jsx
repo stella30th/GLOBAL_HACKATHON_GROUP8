@@ -1,15 +1,11 @@
-import React, { useState } from 'react';
-import { 
-  UploadCloud, FileText, CheckCircle2, User, Globe, 
-  MapPin, Plus, X, Save, ArrowRight, Loader2 
-} from 'lucide-react';
+import { useState } from 'react';
+import { UploadCloud, FileText, User, Plus, X, Save, ArrowRight, Loader2 } from 'lucide-react';
 import { saveProfile, uploadCvFile, resetSampleProfile, DEFAULT_PROFILE } from '../api';
 
 export default function ProfileView({ profile, setProfile, onGoToMatching, showToast }) {
   const [loading, setLoading] = useState(false);
   const [newSkill, setNewSkill] = useState('');
   const [newRole, setNewRole] = useState('');
-  const [newLocation, setNewLocation] = useState('');
 
   const handleFileUpload = async (e) => {
     const file = e.target.files?.[0];
@@ -86,21 +82,6 @@ export default function ProfileView({ profile, setProfile, onGoToMatching, showT
     });
   };
 
-  const addLocation = () => {
-    if (!newLocation.trim()) return;
-    const current = profile.targetLocations || [];
-    if (!current.includes(newLocation.trim())) {
-      setProfile({ ...profile, targetLocations: [...current, newLocation.trim()] });
-    }
-    setNewLocation('');
-  };
-
-  const removeLocation = (loc) => {
-    setProfile({
-      ...profile,
-      targetLocations: (profile.targetLocations || []).filter((item) => item !== loc),
-    });
-  };
 
   if (!profile) {
     return (
@@ -157,7 +138,7 @@ export default function ProfileView({ profile, setProfile, onGoToMatching, showT
           <div className="glass-card">
             <div className="card-title-row">
               <div className="card-title">
-                <UploadCloud size={20} color="#818cf8" />
+                <UploadCloud size={20} style={{ color: 'var(--accent-soft)' }} />
                 <span>AI Resume Extractor</span>
               </div>
             </div>
@@ -174,7 +155,7 @@ export default function ProfileView({ profile, setProfile, onGoToMatching, showT
                 {loading ? <Loader2 className="animate-spin" size={24} /> : <FileText size={24} />}
               </div>
               <div>
-                <strong style={{ color: '#ffffff', display: 'block', marginBottom: '0.2rem' }}>
+                <strong style={{ color: 'var(--text-primary)', display: 'block', marginBottom: '0.2rem' }}>
                   {loading ? 'Extracting resume details...' : 'Drag & Drop your Resume or Click to Browse'}
                 </strong>
                 <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
@@ -184,82 +165,13 @@ export default function ProfileView({ profile, setProfile, onGoToMatching, showT
             </label>
           </div>
 
-          <div className="glass-card">
-            <div className="card-title-row">
-              <div className="card-title">
-                <Globe size={20} color="#06b6d4" />
-                <span>International & Visa Preferences</span>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', cursor: 'pointer' }}>
-                <input
-                  type="checkbox"
-                  checked={profile.willingToRelocate || false}
-                  onChange={(e) => setProfile({ ...profile, willingToRelocate: e.target.checked })}
-                  style={{ marginTop: '0.25rem', width: '18px', height: '18px', accentColor: 'var(--accent-primary)' }}
-                />
-                <div>
-                  <strong style={{ color: '#ffffff', fontSize: '0.9rem' }}>
-                    Willing to Relocate Abroad (Relocation Ready)
-                  </strong>
-                  <p style={{ fontSize: '0.785rem', color: 'var(--text-secondary)' }}>
-                    Enable this option so AI prioritizes jobs in Singapore, Germany, Japan with Visa Sponsorship & Relocation assistance.
-                  </p>
-                </div>
-              </label>
-
-              <div className="form-group">
-                <label className="form-label">Preferred Work Arrangement</label>
-                <select
-                  className="form-control"
-                  value={profile.targetWorkType || 'ANY'}
-                  onChange={(e) => setProfile({ ...profile, targetWorkType: e.target.value })}
-                >
-                  <option value="ANY">Flexible (All arrangements)</option>
-                  <option value="REMOTE">Remote (100% Work from Anywhere)</option>
-                  <option value="HYBRID">Hybrid</option>
-                  <option value="ONSITE">Onsite</option>
-                </select>
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Target Countries / Markets</label>
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  <input
-                    type="text"
-                    className="form-control"
-                    placeholder="e.g., Singapore, Germany, Remote Global..."
-                    value={newLocation}
-                    onChange={(e) => setNewLocation(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addLocation(); }}}
-                  />
-                  <button type="button" className="btn btn-secondary btn-sm" onClick={addLocation}>
-                    <Plus size={16} />
-                  </button>
-                </div>
-                <div className="tag-container">
-                  {(profile.targetLocations || []).map((loc) => (
-                    <span key={loc} className="skill-tag">
-                      <MapPin size={12} color="#06b6d4" />
-                      {loc}
-                      <span className="skill-tag-remove" onClick={() => removeLocation(loc)}>
-                        <X size={12} />
-                      </span>
-                    </span>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
         </div>
 
         {/* Right Column: Editable Profile Form */}
         <form onSubmit={handleSave} className="glass-card">
           <div className="card-title-row">
             <div className="card-title">
-              <User size={20} color="#818cf8" />
+              <User size={20} style={{ color: 'var(--accent-soft)' }} />
               <span>Personal & Professional Profile</span>
             </div>
             <button type="submit" className="btn btn-primary" disabled={loading}>
