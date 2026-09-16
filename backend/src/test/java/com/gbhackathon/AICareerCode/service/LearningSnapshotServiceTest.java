@@ -11,7 +11,15 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.context.annotation.Import;
 
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -166,6 +174,126 @@ class LearningSnapshotServiceTest {
     }
 
     @Test
+    void issuingIdsNeverTouchesTheAuditInTheSharedCache() {
+        // Exactly what two requests share: AiCoachService caches per revision and hands the same
+        // instance to everyone, so the ids must be stamped on a copy, never on this.
+        ResumeAuditDto shared = coach.auditProfile(current());
+        assertNull(shared.getCareerRoadmap().getRoadmapId(), "the cached audit starts with no ids");
+
+        ResumeAuditDto served = snapshots.getOrCreateAudit(current());
+
+        assertNotNull(served.getCareerRoadmap().getRoadmapId());
+        assertNotSame(shared.getCareerRoadmap(), served.getCareerRoadmap());
+        assertNull(shared.getCareerRoadmap().getRoadmapId(), "the shared cached audit must stay unstamped");
+    }
+
+    @Test
+    void asecondGenerationCannotRewriteTheIdsAlreadyReturnedToSomeoneElse() {
+        ResumeAuditDto first = snapshots.getOrCreateAudit(current());
+        String firstRoadmapId = first.getCareerRoadmap().getRoadmapId();
+        List<String> firstIds = idsOf(first.getCareerRoadmap());
+
+        // Force a second generation from the same cached audit, as an overlapping request would.
+        store.invalidate(current().getId(), current().getLearningSnapshotJson());
+        ResumeAuditDto second = snapshots.getOrCreateAudit(current());
+
+        assertNotEquals(firstRoadmapId, second.getCareerRoadmap().getRoadmapId());
+        assertEquals(firstRoadmapId, first.getCareerRoadmap().getRoadmapId(),
+                "the response already sent to the first caller must not be rewritten underneath it");
+        assertEquals(firstIds, idsOf(first.getCareerRoadmap()));
+    }
+
+    @Test
+    void concurrentIdIssuanceKeepsEachRequestsIdsToItself() throws Exception {
+        // No database here on purpose: the defect was in memory, in the step between "the cache
+        // handed me the audit" and "the snapshot was serialised", which is where two real threads
+        // used to stamp over each other.
+        ResumeAuditDto shared = coach.auditProfile(current());
+        int callers = 8;
+
+        ExecutorService pool = Executors.newFixedThreadPool(callers);
+        try {
+            CountDownLatch start = new CountDownLatch(1);
+            List<Future<ResumeAuditDto>> futures = new ArrayList<>();
+            for (int i = 0; i < callers; i++) {
+                futures.add(pool.submit(() -> {
+                    start.await();
+                    ResumeAuditDto mine = snapshots.copyWithNewIds(shared);
+                    // Hold it, exactly as a request does while it waits for the storage lock, then
+                    // read the ids back and check nobody else has been writing into them.
+                    Thread.sleep(5);
+                    return mine;
+                }));
+            }
+            start.countDown();
+
+            Set<String> everyId = new HashSet<>();
+            int expected = 0;
+            for (Future<ResumeAuditDto> future : futures) {
+                CareerRoadmapDto roadmap = future.get(10, TimeUnit.SECONDS).getCareerRoadmap();
+                List<String> ids = idsOf(roadmap);
+                assertFalse(ids.contains(null));
+                everyId.add(roadmap.getRoadmapId());
+                everyId.addAll(ids);
+                expected += ids.size() + 1;
+            }
+            assertEquals(expected, everyId.size(), "each caller must own a distinct set of ids");
+            assertNull(shared.getCareerRoadmap().getRoadmapId(), "the shared audit must be untouched");
+        } finally {
+            pool.shutdownNow();
+        }
+    }
+
+    @Test
+    void aStoredRoadmapMissingItsLaterStagesIsRegeneratedRatherThanServed() {
+        // What an earlier build could leave behind: right version, right revision, ids present,
+        // but only one stage. Structural validation has to happen on read, not just on write.
+        ResumeAuditDto audit = snapshots.getOrCreateAudit(current());
+        String oldRoadmapId = audit.getCareerRoadmap().getRoadmapId();
+        snapshots.updateMilestoneProgress(current().getId(), oldRoadmapId,
+                audit.getCareerRoadmap().allMilestones().get(0).getId(), true);
+
+        audit.getCareerRoadmap().setMonths6(List.of());
+        audit.getCareerRoadmap().setMonths12(null);
+        UserProfile profile = current();
+        profile.setLearningSnapshotJson(writeJson(audit));
+        profileRepository.save(profile);
+
+        CareerRoadmapDto served = snapshots.getOrCreateRoadmap(current());
+
+        assertFalse(served.getMonths6().isEmpty(), "a truncated stored roadmap must not be served");
+        assertFalse(served.getMonths12().isEmpty());
+        assertNotEquals(oldRoadmapId, served.getRoadmapId());
+        assertTrue(profileService.readCompletedMilestones(current()).isEmpty(),
+                "a regenerated roadmap has new ids, so the old progress goes with the old roadmap");
+    }
+
+    @Test
+    void aStoredMilestoneWithNoTitleIsRegeneratedRatherThanRenderedBlank() {
+        ResumeAuditDto audit = snapshots.getOrCreateAudit(current());
+        String oldRoadmapId = audit.getCareerRoadmap().getRoadmapId();
+        audit.getCareerRoadmap().getMonths3().get(0).setTitle("  ");
+
+        UserProfile profile = current();
+        profile.setLearningSnapshotJson(writeJson(audit));
+        profileRepository.save(profile);
+
+        CareerRoadmapDto served = snapshots.getOrCreateRoadmap(current());
+
+        assertNotEquals(oldRoadmapId, served.getRoadmapId());
+        assertTrue(served.allMilestones().stream()
+                .allMatch(m -> m.getTitle() != null && !m.getTitle().isBlank()));
+    }
+
+    private String writeJson(ResumeAuditDto audit) {
+        try {
+            return new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(audit);
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    @Test
     void aSnapshotFromAnIncompatibleVersionIsDiscardedRatherThanServed() {
         snapshots.getOrCreateAudit(current());
         UserProfile profile = current();
@@ -178,6 +306,30 @@ class LearningSnapshotServiceTest {
         assertNotNull(regenerated.getCareerRoadmap().getRoadmapId());
         assertEquals(before + 1, coach.generations.get());
         assertEquals(LearningSnapshotService.SNAPSHOT_VERSION, current().getLearningSnapshotVersion());
+    }
+
+    @Test
+    void aLateRequestCannotDeleteASnapshotThatSomeoneElseAlreadyRepaired() {
+        // Two requests both read the same corrupt snapshot.
+        UserProfile profile = current();
+        String corrupt = "{ this is not json";
+        profile.setLearningSnapshotJson(corrupt);
+        profile.setLearningSnapshotVersion(LearningSnapshotService.SNAPSHOT_VERSION);
+        profile.setLearningSnapshotProfileKey(ProfileService.profileKey(profile));
+        profileRepository.save(profile);
+
+        // The first one regenerates and stores a good snapshot, with progress recorded against it.
+        ResumeAuditDto repaired = snapshots.getOrCreateAudit(current());
+        String roadmapId = repaired.getCareerRoadmap().getRoadmapId();
+        String milestoneId = repaired.getCareerRoadmap().allMilestones().get(0).getId();
+        snapshots.updateMilestoneProgress(current().getId(), roadmapId, milestoneId, true);
+
+        // The second one arrives late, still holding its view of the corrupt content.
+        boolean cleared = store.invalidate(current().getId(), corrupt);
+
+        assertFalse(cleared, "a stale view must not delete the snapshot that replaced it");
+        assertEquals(roadmapId, snapshots.getOrCreateRoadmap(current()).getRoadmapId());
+        assertEquals(List.of(milestoneId), profileService.readCompletedMilestones(current()));
     }
 
     @Test

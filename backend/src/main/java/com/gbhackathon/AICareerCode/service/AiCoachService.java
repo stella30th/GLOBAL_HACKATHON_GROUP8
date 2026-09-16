@@ -174,19 +174,80 @@ public class AiCoachService {
             audit.setModel(model != null ? model.toString() : null);
         }
 
-        if (audit.getCareerRoadmap() == null) {
-            audit.setCareerRoadmap(generateHeuristicRoadmap(profile));
-        }
-        // A roadmap with no AI_FLUENCY milestone is the one failure mode that would make the
-        // product's central claim false, and the model does drop it. Repairing it here covers the
-        // Gemini path and the offline path alike; the added milestone states only what the student
-        // will do, never a fact about them.
-        ensureAiFluencyMilestone(audit.getCareerRoadmap(), profile);
+        audit.setCareerRoadmap(repairRoadmap(audit.getCareerRoadmap(), profile));
 
         // Keep only the newest revision so the cache cannot grow with every edit.
         auditCache.clear();
         auditCache.put(key, audit);
         return audit;
+    }
+
+    /**
+     * Brings a generated roadmap up to the shape the product guarantees, stage by stage.
+     *
+     * <p>This runs before ids are issued and before anything is stored, because a snapshot is kept
+     * until the student next edits their profile — an incomplete roadmap is not a transient glitch
+     * here, it is what they will look at for the rest of the session. Checking only for a null
+     * roadmap was not enough: a model that returns {@code months3} and then stops, or that emits a
+     * milestone with an empty title, produced a page with a blank column and a checkbox attached
+     * to nothing.
+     *
+     * <p>Repair is per stage rather than all-or-nothing. A model that got two stages right keeps
+     * them; only the stage that came back unusable is replaced with the offline equivalent, which
+     * is grounded in the profile and invents no facts.
+     */
+    CareerRoadmapDto repairRoadmap(CareerRoadmapDto roadmap, UserProfile profile) {
+        if (roadmap == null) {
+            roadmap = new CareerRoadmapDto();
+        }
+
+        CareerRoadmapDto fallback = null;
+        List<List<CareerRoadmapDto.RoadmapMilestone>> stages = List.of(
+                usable(roadmap.getMonths3()), usable(roadmap.getMonths6()), usable(roadmap.getMonths12()));
+
+        if (stages.stream().anyMatch(List::isEmpty) || isBlank(roadmap.getTargetGoal())) {
+            fallback = generateHeuristicRoadmap(profile);
+            log.info("Repairing an incomplete roadmap for profile {} from the offline plan", profile.getId());
+        }
+
+        roadmap.setMonths3(stages.get(0).isEmpty() ? usable(fallback.getMonths3()) : stages.get(0));
+        roadmap.setMonths6(stages.get(1).isEmpty() ? usable(fallback.getMonths6()) : stages.get(1));
+        roadmap.setMonths12(stages.get(2).isEmpty() ? usable(fallback.getMonths12()) : stages.get(2));
+        if (isBlank(roadmap.getTargetGoal())) {
+            roadmap.setTargetGoal(fallback.getTargetGoal());
+        }
+
+        // A roadmap with no AI_FLUENCY milestone is the one failure mode that would make the
+        // product's central claim false, and the model does drop it. Repairing it here covers the
+        // Gemini path and the offline path alike; the added milestone states only what the student
+        // will do, never a fact about them.
+        ensureAiFluencyMilestone(roadmap, profile);
+        return roadmap;
+    }
+
+    /**
+     * The milestones in a stage that can actually be rendered and ticked: a title and a description
+     * are both required, and a milestone with neither is dropped rather than shown as a blank row.
+     */
+    private List<CareerRoadmapDto.RoadmapMilestone> usable(List<CareerRoadmapDto.RoadmapMilestone> stage) {
+        if (stage == null) {
+            return new ArrayList<>();
+        }
+        List<CareerRoadmapDto.RoadmapMilestone> kept = new ArrayList<>();
+        for (CareerRoadmapDto.RoadmapMilestone milestone : stage) {
+            if (milestone == null || isBlank(milestone.getTitle()) || isBlank(milestone.getDescription())) {
+                continue;
+            }
+            if (isBlank(milestone.getEstimatedHours())) {
+                milestone.setEstimatedHours("effort not estimated");
+            }
+            kept.add(milestone);
+        }
+        return kept;
+    }
+
+    private static boolean isBlank(String value) {
+        return value == null || value.isBlank();
     }
 
     /** True when the roadmap already coaches working with AI rather than only about it. */
@@ -311,10 +372,7 @@ public class AiCoachService {
         if (gemini.isConfigured()) {
             roadmap = callGeminiForRoadmap(profile);
         }
-        if (roadmap == null || roadmap.getMonths3() == null || roadmap.getMonths3().isEmpty()) {
-            roadmap = generateHeuristicRoadmap(profile);
-        }
-        ensureAiFluencyMilestone(roadmap, profile);
+        roadmap = repairRoadmap(roadmap, profile);
 
         roadmapCache.clear();
         roadmapCache.put(key, roadmap);

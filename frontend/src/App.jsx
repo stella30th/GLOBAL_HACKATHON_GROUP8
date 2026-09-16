@@ -6,6 +6,7 @@ import ResumeAuditView from './components/ResumeAuditView';
 import AiCoachChatView from './components/AiCoachChatView';
 import {
   fetchCurrentProfile,
+  cacheProfile,
   updateMilestoneProgress,
   DEFAULT_PROFILE,
   getApiBase,
@@ -36,7 +37,7 @@ const STATUS = {
   OFFLINE: 'offline',
 };
 
-const EMPTY_CHAT = { sessionId: 'initial', messages: [], loading: false, context: null };
+const EMPTY_CHAT = { sessionId: 'initial', messages: [], loading: false, context: null, pendingRetry: null };
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('profile');
@@ -58,6 +59,10 @@ export default function App() {
 
   const revision = profileRevisionOf(profile);
   const lastRevisionRef = useRef(revision);
+  // Mirrors `revision` for callbacks that must not close over a stale render.
+  const revisionRef = useRef(revision);
+  // Tail of the progress-update chain. Ticks queue behind each other rather than racing.
+  const progressQueueRef = useRef(Promise.resolve());
 
   const connect = useCallback(async () => {
     if (connectingRef.current) return;
@@ -93,6 +98,12 @@ export default function App() {
     if (status !== STATUS.ONLINE) return undefined;
     return startKeepAlive();
   }, [status]);
+
+  // Kept in an effect rather than assigned during render: event handlers only ever run after the
+  // commit, so they still see the revision that is on screen.
+  useEffect(() => {
+    revisionRef.current = revision;
+  }, [revision]);
 
   /**
    * A real profile edit changes the revision, which means the analysis, the roadmap and the
@@ -133,28 +144,52 @@ export default function App() {
    * Pessimistic: the checkbox only moves once the server has accepted it. An optimistic tick that
    * the server then rejects (stale roadmap, milestone gone) leaves the user believing they have
    * recorded something they have not.
+   *
+   * <p>Updates are queued one behind another. Each response carries the server's whole progress
+   * list, so two ticks in flight together could land out of order and let the earlier, shorter
+   * list overwrite the later one — the database stayed correct while the screen and the cached
+   * profile quietly lost a tick. Only one checkbox is disabled at a time by design, so ticking
+   * three boxes quickly is ordinary use, not an edge case.
    */
-  const toggleMilestone = useCallback(async (milestoneId, roadmapId, completed) => {
-    try {
-      const updated = await updateMilestoneProgress(milestoneId, roadmapId, completed);
-      setProfile(updated);
-      return { ok: true };
-    } catch (err) {
-      if (err.status === 409 || err.status === 404) {
-        // The roadmap this tab is showing is not the current one any more. Pull the real profile
-        // back so the roadmap reloads instead of accumulating more clicks that cannot be saved.
-        try {
-          const fresh = await fetchCurrentProfile();
-          setProfile(fresh);
-        } catch {
-          // Leave the stale profile in place; the message below still explains what happened.
+  const toggleMilestone = useCallback((milestoneId, roadmapId, completed) => {
+    const revisionAtRequest = revisionRef.current;
+
+    const run = progressQueueRef.current.then(async () => {
+      try {
+        const updated = await updateMilestoneProgress(milestoneId, roadmapId, completed);
+        // The profile was replaced while this was in flight (an edit, a CV upload, a sample), so
+        // this progress list belongs to a roadmap that no longer exists. Nothing about it is kept
+        // — not the screen, and not the browser cache the next page load reads from.
+        if (revisionRef.current !== revisionAtRequest) {
+          return { ok: false, reload: true, message: 'Your profile changed, so this was not applied.' };
         }
-        showToast(err.message);
-        return { ok: false, reload: true, message: err.message };
+        setProfile(updated);
+        cacheProfile(updated);
+        return { ok: true };
+      } catch (err) {
+        if (err.status === 409 || err.status === 404) {
+          // The roadmap this tab is showing is not the current one any more. Pull the real profile
+          // back so the roadmap reloads instead of accumulating more clicks that cannot be saved.
+          try {
+            const fresh = await fetchCurrentProfile(undefined, { cache: false });
+            if (revisionRef.current === revisionAtRequest) {
+              setProfile(fresh);
+              cacheProfile(fresh);
+            }
+          } catch {
+            // Leave the stale profile in place; the message below still explains what happened.
+          }
+          showToast(err.message);
+          return { ok: false, reload: true, message: err.message };
+        }
+        showToast(err.message || 'Could not save your progress');
+        return { ok: false, reload: false, message: err.message };
       }
-      showToast(err.message || 'Could not save your progress');
-      return { ok: false, reload: false, message: err.message };
-    }
+    });
+
+    // The queue must survive a rejection, or one failure would stall every later tick.
+    progressQueueRef.current = run.catch(() => {});
+    return run;
   }, []);
 
   const isConnected = status === STATUS.ONLINE;

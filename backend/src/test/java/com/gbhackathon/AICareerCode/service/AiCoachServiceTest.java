@@ -88,6 +88,54 @@ class AiCoachServiceTest {
     }
 
     @Test
+    void aRoadmapMissingLaterStagesIsCompletedBeforeItCanBeStored() {
+        // What a model that ran out of steam actually returns: stage one, then nothing.
+        CareerRoadmapDto truncated = new CareerRoadmapDto();
+        truncated.setTargetGoal("Become employable");
+        truncated.setMonths3(new java.util.ArrayList<>(List.of(new CareerRoadmapDto.RoadmapMilestone(
+                "Learn the fundamentals", "Study the basics properly.", "SKILL", "20 hrs"))));
+
+        CareerRoadmapDto repaired = coach.repairRoadmap(truncated, student("Year 3"));
+
+        assertFalse(repaired.getMonths6().isEmpty(), "months6 must not reach the database empty");
+        assertFalse(repaired.getMonths12().isEmpty(), "months12 must not reach the database empty");
+        // The stage the model did get right is kept rather than thrown away with the rest.
+        assertEquals("Learn the fundamentals", repaired.getMonths3().get(0).getTitle());
+        assertEquals("Become employable", repaired.getTargetGoal());
+        assertTrue(hasAiFluency(repaired));
+    }
+
+    @Test
+    void milestonesWithNothingToShowAreDroppedAndTheStageIsRefilled() {
+        CareerRoadmapDto roadmap = coach.generateHeuristicRoadmap(student("Year 2"));
+        // A stage containing only unusable entries is as empty as a missing one.
+        roadmap.setMonths6(new java.util.ArrayList<>(List.of(
+                new CareerRoadmapDto.RoadmapMilestone("", "", "PROJECT", "10 hrs"),
+                new CareerRoadmapDto.RoadmapMilestone("Has a title", null, "PROJECT", "10 hrs"))));
+
+        CareerRoadmapDto repaired = coach.repairRoadmap(roadmap, student("Year 2"));
+
+        assertFalse(repaired.getMonths6().isEmpty());
+        assertTrue(repaired.allMilestones().stream()
+                        .allMatch(m -> m.getTitle() != null && !m.getTitle().isBlank()
+                                && m.getDescription() != null && !m.getDescription().isBlank()),
+                "no milestone may render as a blank row with a checkbox attached to it");
+        assertTrue(repaired.allMilestones().stream()
+                .allMatch(m -> m.getEstimatedHours() != null && !m.getEstimatedHours().isBlank()));
+    }
+
+    @Test
+    void aRoadmapWithNoGoalGetsOneFromTheOfflinePlan() {
+        CareerRoadmapDto roadmap = coach.generateHeuristicRoadmap(student("Year 4"));
+        roadmap.setTargetGoal("   ");
+
+        CareerRoadmapDto repaired = coach.repairRoadmap(roadmap, student("Year 4"));
+
+        assertNotNull(repaired.getTargetGoal());
+        assertFalse(repaired.getTargetGoal().isBlank());
+    }
+
+    @Test
     void aRoadmapThatAlreadyHasOneIsLeftAlone() {
         CareerRoadmapDto roadmap = coach.generateHeuristicRoadmap(student("Year 2"));
         int before = roadmap.allMilestones().size();

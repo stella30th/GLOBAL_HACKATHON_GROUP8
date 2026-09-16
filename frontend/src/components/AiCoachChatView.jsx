@@ -58,6 +58,17 @@ function renderFormattedContent(content) {
   });
 }
 
+/**
+ * A bubble that reports why there is no answer, rather than being one.
+ *
+ * `error` is a request that never completed; `offline` is a 200 from the server saying the model
+ * did not answer. They differ only in how far the request got — for the student both mean the
+ * exercise is still waiting, so both offer Retry and neither is sent back as conversation history.
+ */
+function isFailedReply(message) {
+  return message.generatedBy === 'error' || message.generatedBy === 'offline';
+}
+
 /** Kick-off message. The student has not typed anything yet, so the coach is told to start. */
 const PRACTICE_OPENER =
   'The student has not answered yet. Begin the exercise: ask exactly one question or set one small '
@@ -78,10 +89,8 @@ export default function AiCoachChatView({
   // Practice requests already turned into a session. A click must produce exactly one opening
   // prompt, and StrictMode runs effects twice in development.
   const consumedRef = useRef(new Set());
-  // What to re-send if the last request failed, so Retry does not duplicate the user's message.
-  const lastRequestRef = useRef(null);
 
-  const { sessionId, messages, loading, context } = chat;
+  const { sessionId, messages, loading, context, pendingRetry } = chat;
   const completedIds = profile?.completedMilestones || [];
   const milestoneDone = context?.milestoneId ? completedIds.includes(context.milestoneId) : false;
 
@@ -95,17 +104,18 @@ export default function AiCoachChatView({
    * no longer exists and is dropped rather than appended to the wrong thread.
    */
   const runSend = useCallback(async ({ targetSession, outgoingText, history, displayText }) => {
-    lastRequestRef.current = { targetSession, outgoingText, history };
-
     setChat((prev) => {
       if (prev.sessionId !== targetSession) return prev;
-      const withoutErrors = prev.messages.filter((m) => m.generatedBy !== 'error');
+      const kept = prev.messages.filter((m) => !isFailedReply(m));
       return {
         ...prev,
         loading: true,
-        messages: displayText
-          ? [...withoutErrors, { role: 'user', content: displayText }]
-          : withoutErrors,
+        // What a Retry would have to re-send. It lives in the session state, not in a ref: the
+        // chat view is unmounted whenever the user visits another tab, and a ref goes with it —
+        // the Retry button survived the trip but the payload behind it did not, so pressing it
+        // did nothing at all.
+        pendingRetry: { targetSession, outgoingText, history },
+        messages: displayText ? [...kept, { role: 'user', content: displayText }] : kept,
       };
     });
 
@@ -113,9 +123,14 @@ export default function AiCoachChatView({
       const res = await sendChatMessage(outgoingText, history);
       setChat((prev) => {
         if (prev.sessionId !== targetSession) return prev;
+        // HTTP 200 with generatedBy "offline" is not an answer: it is the server saying the model
+        // never replied. Treated as a delivered message it left the opening exercise of a practice
+        // session unanswerable, with no way back except starting over.
+        const delivered = res.generatedBy !== 'offline';
         return {
           ...prev,
           loading: false,
+          pendingRetry: delivered ? null : prev.pendingRetry,
           messages: [...prev.messages, {
             role: 'assistant',
             content: res.reply,
@@ -147,7 +162,7 @@ export default function AiCoachChatView({
     consumedRef.current.add(practiceRequest.requestId);
 
     const newSessionId = `practice-${practiceRequest.requestId}`;
-    setChat({ sessionId: newSessionId, messages: [], loading: false, context: practiceRequest });
+    setChat({ sessionId: newSessionId, messages: [], loading: false, context: practiceRequest, pendingRetry: null });
     onPracticeConsumed?.();
 
     const contextBlock = buildPracticeContextBlock(practiceRequest);
@@ -163,9 +178,11 @@ export default function AiCoachChatView({
     const textToSend = typeof userText === 'string' ? userText : input;
     if (!textToSend.trim() || loading) return;
 
-    // Only real exchanges are context; error notices are UI state, not conversation.
+    // Only real exchanges are context. An outage notice and an offline notice are both the app
+    // reporting on itself, and feeding them back would have the coach discussing its own downtime
+    // instead of the exercise.
     const history = messages
-      .filter((m) => m.generatedBy !== 'error' && (m.role === 'user' || m.role === 'assistant'))
+      .filter((m) => !isFailedReply(m) && (m.role === 'user' || m.role === 'assistant'))
       .slice(-6)
       .map((m) => ({ role: m.role, content: m.content }));
 
@@ -184,9 +201,8 @@ export default function AiCoachChatView({
   };
 
   const handleRetry = () => {
-    const last = lastRequestRef.current;
-    if (!last || last.targetSession !== sessionId || loading) return;
-    runSend({ ...last, displayText: null });
+    if (!pendingRetry || pendingRetry.targetSession !== sessionId || loading) return;
+    runSend({ ...pendingRetry, displayText: null });
   };
 
   const handleKeyDown = (e) => {
@@ -221,7 +237,13 @@ export default function AiCoachChatView({
     `🎤 Ask me a common interview question for ${field} internships`,
   ];
 
-  const lastIsError = messages.length > 0 && messages[messages.length - 1].generatedBy === 'error';
+  // Retry is offered whenever the last thing in the thread is the app explaining itself instead of
+  // the coach answering, and there is still something to re-send.
+  const canRetry = !loading
+    && !!pendingRetry
+    && pendingRetry.targetSession === sessionId
+    && messages.length > 0
+    && isFailedReply(messages[messages.length - 1]);
   const label = practiceLabel(context);
 
   return (
@@ -327,7 +349,7 @@ export default function AiCoachChatView({
             </div>
           ))}
 
-          {lastIsError && !loading && (
+          {canRetry && (
             <div style={{ display: 'flex', justifyContent: 'center', marginTop: '0.5rem' }}>
               <button className="btn btn-secondary btn-sm" onClick={handleRetry}>
                 <RotateCcw size={13} /> Retry

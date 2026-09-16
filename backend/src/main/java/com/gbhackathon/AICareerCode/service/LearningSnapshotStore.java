@@ -53,9 +53,11 @@ public class LearningSnapshotStore {
         }
         try {
             ResumeAuditDto audit = objectMapper.readValue(json, ResumeAuditDto.class);
-            if (audit != null && audit.getCareerRoadmap() != null && hasIds(audit.getCareerRoadmap())) {
+            if (audit != null && isServable(audit.getCareerRoadmap())) {
                 return Optional.of(audit);
             }
+            log.info("Learning snapshot for profile {} is structurally incomplete; it will be regenerated",
+                    profile.getId());
             return Optional.empty();
         } catch (Exception e) {
             // Never log the body: it is derived from the user's CV.
@@ -65,13 +67,55 @@ public class LearningSnapshotStore {
         }
     }
 
-    /** Drops an unusable or outdated snapshot, and the progress that pointed into it. */
+    /**
+     * Whether a stored roadmap can still be put in front of a student.
+     *
+     * <p>Validation happens on the way out, not only on the way in. Repairing at generation time
+     * fixes what this build writes; it does nothing for a snapshot an earlier build already stored,
+     * and a snapshot lives until the student next edits their profile. A roadmap saved without its
+     * six- or twelve-month stage would otherwise have stayed on screen indefinitely, complete and
+     * plausible-looking apart from two empty columns. Failing the check here sends it back through
+     * generation and clears the progress with it, which is the same rule an edit follows.
+     */
+    private boolean isServable(CareerRoadmapDto roadmap) {
+        if (roadmap == null
+                || roadmap.getRoadmapId() == null || roadmap.getRoadmapId().isBlank()
+                || isEmpty(roadmap.getMonths3()) || isEmpty(roadmap.getMonths6()) || isEmpty(roadmap.getMonths12())) {
+            return false;
+        }
+        return roadmap.allMilestones().stream().allMatch(m ->
+                m != null
+                        && m.getId() != null && !m.getId().isBlank()
+                        && m.getTitle() != null && !m.getTitle().isBlank()
+                        && m.getDescription() != null && !m.getDescription().isBlank());
+    }
+
+    private static boolean isEmpty(List<CareerRoadmapDto.RoadmapMilestone> stage) {
+        return stage == null || stage.isEmpty();
+    }
+
+    /**
+     * Drops one specific unusable snapshot, and the progress that pointed into it.
+     *
+     * <p>{@code observedJson} is the exact content the caller read and rejected. Under the lock it
+     * must still be what is stored, otherwise this does nothing. Without that check the method was
+     * "clear whatever is there now", and two requests hitting the same corrupt snapshot would race:
+     * the first regenerates and stores a good snapshot, the second then arrives with its own stale
+     * view and deletes it, taking the milestone ids and any ticks with it.
+     *
+     * @return true when this call is the one that cleared it
+     */
     @Transactional
-    public void invalidate(Long profileId) {
-        profileRepository.findByIdForUpdate(profileId).ifPresent(p -> {
+    public boolean invalidate(Long profileId, String observedJson) {
+        return profileRepository.findByIdForUpdate(profileId).map(p -> {
+            if (!Objects.equals(observedJson, p.getLearningSnapshotJson())) {
+                log.debug("Snapshot for profile {} already moved on; leaving it alone", profileId);
+                return false;
+            }
             profileService.clearLearningState(p);
             profileRepository.save(p);
-        });
+            return true;
+        }).orElse(false);
     }
 
     /**
@@ -146,12 +190,4 @@ public class LearningSnapshotStore {
         return profile;
     }
 
-    private boolean hasIds(CareerRoadmapDto roadmap) {
-        if (roadmap.getRoadmapId() == null || roadmap.getRoadmapId().isBlank()) {
-            return false;
-        }
-        List<CareerRoadmapDto.RoadmapMilestone> milestones = roadmap.allMilestones();
-        return !milestones.isEmpty()
-                && milestones.stream().allMatch(m -> m.getId() != null && !m.getId().isBlank());
-    }
 }

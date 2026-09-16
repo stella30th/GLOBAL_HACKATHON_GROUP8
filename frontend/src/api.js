@@ -171,7 +171,15 @@ export function readCachedProfile() {
   }
 }
 
-function cacheProfile(profile) {
+/**
+ * Writes the browser's copy of the profile.
+ *
+ * Exported because the caller, not this module, knows whether a response is still relevant. A
+ * request that resolves after the profile has moved on is dropped by App — but it used to have
+ * already written itself to the cache on the way through, so the next page load restored the very
+ * revision that had just been rejected.
+ */
+export function cacheProfile(profile) {
   if (typeof window === 'undefined' || !profile) return;
   try {
     localStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(profile));
@@ -180,11 +188,15 @@ function cacheProfile(profile) {
   }
 }
 
-export async function fetchCurrentProfile(timeoutMs = WAKE_TIMEOUT_MS) {
+/**
+ * Pass `{ cache: false }` when the response might arrive too late to be relevant; the caller then
+ * calls {@link cacheProfile} itself once it has decided to keep it.
+ */
+export async function fetchCurrentProfile(timeoutMs = WAKE_TIMEOUT_MS, { cache = true } = {}) {
   const res = await fetchWithRetry(`${getApiBase()}/profiles/current`, {}, timeoutMs);
   if (!res.ok) throw new Error('Could not load your profile');
   const profile = await res.json();
-  cacheProfile(profile);
+  if (cache) cacheProfile(profile);
   return profile;
 }
 
@@ -235,6 +247,9 @@ export async function resetSampleProfile(type) {
  * discards the roadmap the milestone belongs to. The server also validates the milestone against
  * the current roadmap, so a stale tab gets 409/404 instead of writing progress into nothing; the
  * status is attached to the error so the caller can react rather than just showing a message.
+ *
+ * Deliberately does not touch the browser cache: by the time this resolves the profile may have
+ * been replaced, and only the caller can tell. It calls {@link cacheProfile} if it keeps the result.
  */
 export async function updateMilestoneProgress(milestoneId, roadmapId, completed) {
   const res = await fetchWithTimeout(
@@ -251,9 +266,7 @@ export async function updateMilestoneProgress(milestoneId, roadmapId, completed)
     error.status = res.status;
     throw error;
   }
-  const profile = await res.json();
-  cacheProfile(profile);
-  return profile;
+  return res.json();
 }
 
 // ---------------------------------------------------------------------------

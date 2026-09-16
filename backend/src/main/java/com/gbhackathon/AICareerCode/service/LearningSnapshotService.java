@@ -1,5 +1,6 @@
 package com.gbhackathon.AICareerCode.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.gbhackathon.AICareerCode.dto.CareerRoadmapDto;
 import com.gbhackathon.AICareerCode.dto.ResumeAuditDto;
 import com.gbhackathon.AICareerCode.model.UserProfile;
@@ -33,6 +34,7 @@ public class LearningSnapshotService {
 
     private final LearningSnapshotStore store;
     private final AiCoachService aiCoachService;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     public LearningSnapshotService(LearningSnapshotStore store, AiCoachService aiCoachService) {
         this.store = store;
@@ -71,16 +73,19 @@ public class LearningSnapshotService {
         if (stored.isPresent()) {
             return stored.get();
         }
-        if (profile.getLearningSnapshotJson() != null && !profile.getLearningSnapshotJson().isBlank()) {
+
+        String unusable = profile.getLearningSnapshotJson();
+        if (unusable != null && !unusable.isBlank()) {
             // Present but unusable: wrong revision, wrong version, missing ids or unparseable.
-            // Clear it so a legacy row cannot keep failing every request it touches.
-            store.invalidate(profile.getId());
+            // Clear it so a legacy row cannot keep failing every request that touches it — but
+            // only the exact content this request read, never whatever happens to be there by the
+            // time the lock is granted.
+            store.invalidate(profile.getId(), unusable);
         }
 
         // Generated outside any transaction: a Gemini round trip takes tens of seconds and must
         // never hold a database lock.
-        ResumeAuditDto generated = aiCoachService.auditProfile(profile);
-        assignIds(generated);
+        ResumeAuditDto generated = copyWithNewIds(aiCoachService.auditProfile(profile));
         log.info("Stored a new learning snapshot for profile {} (revision {})", profile.getId(), revision);
 
         return store.store(profile.getId(), revision, generated);
@@ -97,18 +102,41 @@ public class LearningSnapshotService {
     }
 
     /**
-     * Assigns the roadmap and milestone ids. The model is never asked to produce them: it repeats
-     * and reuses them across generations. An array index or the title is not an identifier either,
-     * since both change the moment the wording does.
+     * A private copy of the generated audit, carrying freshly issued ids.
+     *
+     * <p>The copy is the point. {@link AiCoachService#auditProfile} caches per profile revision and
+     * hands the same instance to every caller, so writing ids into it wrote them into everyone's
+     * copy: two requests generating at once would each stamp their own ids over the shared object,
+     * and whichever finished second silently rewrote the ids the first had already serialised and
+     * returned. The lock at the storage step cannot help with that — the damage happens before it,
+     * in memory. Each request now stamps only its own object, and the lock decides which one wins.
+     *
+     * <p>The model is never asked to produce the ids: it repeats and reuses them across
+     * generations. An array index or the title is not an identifier either, since both change the
+     * moment the wording does.
      */
-    private void assignIds(ResumeAuditDto audit) {
-        if (audit == null || audit.getCareerRoadmap() == null) {
-            return;
+    ResumeAuditDto copyWithNewIds(ResumeAuditDto audit) {
+        if (audit == null) {
+            return null;
         }
-        CareerRoadmapDto roadmap = audit.getCareerRoadmap();
-        roadmap.setRoadmapId(UUID.randomUUID().toString());
-        for (CareerRoadmapDto.RoadmapMilestone milestone : roadmap.allMilestones()) {
-            milestone.setId(UUID.randomUUID().toString());
+        ResumeAuditDto copy;
+        try {
+            copy = objectMapper.readValue(objectMapper.writeValueAsBytes(audit), ResumeAuditDto.class);
+        } catch (Exception e) {
+            // Serialising it is also how it gets stored, so this should not happen; if it does, the
+            // request still needs an answer and a unique set of ids is better than a shared one.
+            log.warn("Could not copy the generated audit ({}); stamping ids on the original",
+                    e.getClass().getSimpleName());
+            copy = audit;
         }
+
+        CareerRoadmapDto roadmap = copy.getCareerRoadmap();
+        if (roadmap != null) {
+            roadmap.setRoadmapId(UUID.randomUUID().toString());
+            for (CareerRoadmapDto.RoadmapMilestone milestone : roadmap.allMilestones()) {
+                milestone.setId(UUID.randomUUID().toString());
+            }
+        }
+        return copy;
     }
 }
