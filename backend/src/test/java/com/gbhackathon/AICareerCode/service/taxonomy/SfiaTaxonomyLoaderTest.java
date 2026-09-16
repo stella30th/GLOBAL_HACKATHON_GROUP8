@@ -123,14 +123,14 @@ class SfiaTaxonomyLoaderTest {
     }
 
     private static byte[] validWorkbook(String code, String name) throws IOException {
-        return workbookBytes(VALID_HEADERS, List.of(new String[] {
+        return workbookBytes(VALID_HEADERS, List.<String[]>of(new String[] {
                 code, name, "Development and implementation", "", "A test skill.",
                 "Does it under supervision.", "Does it independently."
         }));
     }
 
     private static byte[] workbookWithNoRecognisableRows() throws IOException {
-        return workbookBytes(new String[] {"Notes", "Comment"}, List.of(new String[] {"n/a", "n/a"}));
+        return workbookBytes(new String[] {"Notes", "Comment"}, List.<String[]>of(new String[] {"n/a", "n/a"}));
     }
 
     private static void writeFile(Path file, byte[] content) throws IOException {
